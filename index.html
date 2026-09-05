@@ -559,4 +559,440 @@
                         <label>Select Products to include in this Flash Sale</label>
                         <select id="fsProducts" multiple style="height: 100px;" required></select>
                     </div>
-                    
+                    <button type="submit" class="submit-btn">Create / Add Flash Sale</button>
+                </form>
+            </div>
+
+            <!-- ADD PRODUCT FORM -->
+            <div class="admin-section">
+                <h3>Add New Product</h3>
+                <form onsubmit="handleAddProduct(event)">
+                    <div class="form-group">
+                        <label>Product Title</label>
+                        <input type="text" id="pTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="pCategory" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Short Description</label>
+                        <textarea id="pDesc" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Product Image File</label>
+                        <input type="file" id="pImageFile" accept="image/*" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Daraz Redirect Link</label>
+                        <input type="url" id="pLink" placeholder="https://www.daraz.pk/..." required>
+                    </div>
+
+                    <!-- SECRET SEO FIELDS -->
+                    <div style="background: #fdf8f5; border: 1px solid var(--primary-color); padding: 10px; border-radius: 4px; margin-bottom: 12px;">
+                        <label style="font-weight: bold; font-size: 11px; color: var(--primary-color);">SECRET SEO TAGS (Hidden from buyers)</label>
+                        <div class="form-group" style="margin-top: 5px;">
+                            <input type="text" id="pSeoTitle" placeholder="Secret SEO Meta Title">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <input type="text" id="pSeoDesc" placeholder="Secret SEO Meta Keywords / Search Description">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-btn"><i class="fa-solid fa-plus"></i> Upload Product</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-content">
+            <div>
+                <p>&copy; 2026 Store.X | All Rights Reserved</p>
+            </div>
+            <div class="asim-bio">
+                Created by Asim — A dedicated web designer and developer creating fast, modern, and realistic e-commerce store solutions.
+            </div>
+        </div>
+    </footer>
+
+    <!-- APPLICATION LOGIC -->
+    <script>
+        // DATA STATE WITH LOCALSTORAGE PERSISTENCE
+        let categories = JSON.parse(localStorage.getItem('storex_categories')) || ["All", "Electronics", "Fashion", "Home & Living"];
+        let products = JSON.parse(localStorage.getItem('storex_products')) || [
+            {
+                id: "p1",
+                title: "Wireless Bluetooth Earbuds Pro",
+                category: "Electronics",
+                desc: "High quality sound with active noise cancellation and long battery life.",
+                image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&q=80",
+                link: "https://www.daraz.pk/"
+            },
+            {
+                id: "p2",
+                title: "Smart Fitness Watch Ultra",
+                category: "Electronics",
+                desc: "Track health, sports, heart rate, and notifications in real-time.",
+                image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80",
+                link: "https://www.daraz.pk/"
+            },
+            {
+                id: "p3",
+                title: "Casual Cotton T-Shirt",
+                category: "Fashion",
+                desc: "100% pure premium breathable cotton for everyday comfort.",
+                image: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&q=80",
+                link: "https://www.daraz.pk/"
+            }
+        ];
+        let flashSales = JSON.parse(localStorage.getItem('storex_flash_sales')) || [
+            {
+                id: "fs1",
+                title: "MEGA FLASH SALE",
+                banner: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1000&q=80",
+                images: [
+                    "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&q=80",
+                    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80"
+                ],
+                timer: new Date(Date.now() + 86400000).toISOString(),
+                productIds: ["p1", "p2"]
+            }
+        ];
+
+        let activeCategory = "All";
+        let logoDataUrl = localStorage.getItem('storex_logo') || "";
+        let heroDataUrl = localStorage.getItem('storex_hero') || "";
+
+        // ROUTER SYSTEM
+        function route() {
+            const hash = window.location.hash;
+            document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
+
+            if (hash === '#admin') {
+                document.getElementById('adminView').classList.add('active');
+                renderAdmin();
+            } else if (hash.startsWith('#flash-sale')) {
+                document.getElementById('flashSalePageView').classList.add('active');
+                const params = new URLSearchParams(hash.split('?')[1]);
+                const fsId = params.get('id');
+                renderFlashSalePage(fsId);
+            } else {
+                document.getElementById('storefrontView').classList.add('active');
+                renderStorefront();
+            }
+        }
+
+        function navigateTo(hash) {
+            window.location.hash = hash;
+            route();
+        }
+
+        window.addEventListener('hashchange', route);
+        window.addEventListener('load', () => {
+            route();
+            applyStoreIdentity();
+        });
+
+        // LOGO & HERO INSTANT UPLOADS
+        function handleLogoSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                logoDataUrl = evt.target.result;
+                localStorage.setItem('storex_logo', logoDataUrl);
+                applyStoreIdentity();
+                alert('PNG Logo uploaded and applied immediately!');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleHeroSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                heroDataUrl = evt.target.result;
+                localStorage.setItem('storex_hero', heroDataUrl);
+                applyStoreIdentity();
+                alert('Hero Banner image updated successfully!');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function applyStoreIdentity() {
+            const logoContainers = [document.getElementById('siteLogoContainer'), document.getElementById('siteLogoContainerFS')];
+            logoContainers.forEach(container => {
+                if (!container) return;
+                if (logoDataUrl) {
+                    container.innerHTML = `<img src="${logoDataUrl}" class="logo-img" alt="Store Logo">`;
+                } else {
+                    container.innerHTML = `<div class="logo-text">Store<span>.X</span></div>`;
+                }
+            });
+
+            const hero = document.getElementById('siteHeroBanner');
+            if (hero && heroDataUrl) {
+                hero.style.backgroundImage = `url('${heroDataUrl}')`;
+            }
+        }
+
+        // RENDER STOREFRONT
+        function renderStorefront() {
+            renderFlashSales();
+            renderCategoryBar();
+            renderProducts();
+        }
+
+        function renderFlashSales() {
+            const container = document.getElementById('flashSalesContainer');
+            if (!flashSales || flashSales.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = flashSales.map(fs => {
+                const galleryImgs = (fs.images || []).map(img => `<img src="${img}" class="flash-preview-item">`).join('');
+                return `
+                    <div class="flash-sale-card" onclick="navigateTo('#flash-sale?id=${fs.id}')">
+                        <div class="flash-sale-header">
+                            <div class="flash-sale-title">
+                                <i class="fa-solid fa-bolt"></i> ${fs.title}
+                            </div>
+                            <span class="flash-timer-badge">Ends: ${new Date(fs.timer).toLocaleDateString()}</span>
+                        </div>
+                        ${fs.banner ? `<img src="${fs.banner}" class="flash-banner-img">` : ''}
+                        <div class="flash-preview-grid">
+                            ${galleryImgs}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderCategoryBar() {
+            const bar = document.getElementById('categoryBar');
+            bar.innerHTML = categories.map(cat => `
+                <div class="cat-chip ${cat === activeCategory ? 'active' : ''}" onclick="selectCategory('${cat}')">${cat}</div>
+            `).join('');
+        }
+
+        function selectCategory(cat) {
+            activeCategory = cat;
+            renderCategoryBar();
+            renderProducts();
+        }
+
+        function renderProducts() {
+            const grid = document.getElementById('productGrid');
+            const filtered = activeCategory === "All" ? products : products.filter(p => p.category === activeCategory);
+            
+            grid.innerHTML = filtered.map(p => `
+                <div class="product-card">
+                    <img src="${p.image}" class="product-image" alt="${p.title}">
+                    <div class="product-info">
+                        <div class="product-title">${p.title}</div>
+                        <div class="product-desc">${p.desc}</div>
+                        <a href="${p.link}" target="_blank" class="buy-btn">Buy on Daraz</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // DEDICATED FLASH SALE PAGE
+        function renderFlashSalePage(fsId) {
+            const fs = flashSales.find(item => item.id === fsId) || flashSales[0];
+            if (!fs) return;
+
+            document.getElementById('fsPageTitle').innerText = fs.title;
+            document.getElementById('fsPageTimer').innerText = "Ends: " + new Date(fs.timer).toLocaleString();
+            
+            const bannerImg = document.getElementById('fsPageBanner');
+            if (fs.banner) {
+                bannerImg.src = fs.banner;
+                bannerImg.style.display = "block";
+            } else {
+                bannerImg.style.display = "none";
+            }
+
+            const saleProducts = products.filter(p => fs.productIds.includes(p.id));
+            const grid = document.getElementById('fsProductGrid');
+            grid.innerHTML = saleProducts.map(p => `
+                <div class="product-card">
+                    <img src="${p.image}" class="product-image" alt="${p.title}">
+                    <div class="product-info">
+                        <div class="product-title">${p.title}</div>
+                        <div class="product-desc">${p.desc}</div>
+                        <a href="${p.link}" target="_blank" class="buy-btn">Buy on Daraz</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // SEARCH SUGGESTIONS
+        function handleSearchInput() {
+            const q = document.getElementById('searchInput').value.toLowerCase().trim();
+            const box = document.getElementById('suggestionsBox');
+            if (!q) {
+                box.style.display = 'none';
+                return;
+            }
+            const matches = products.filter(p => p.title.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
+            if (matches.length === 0) {
+                box.style.display = 'none';
+                return;
+            }
+            box.innerHTML = matches.slice(0, 5).map(m => `
+                <div class="suggestion-item" onclick="selectSearch('${m.title}')">${m.title}</div>
+            `).join('');
+            box.style.display = 'block';
+        }
+
+        function selectSearch(title) {
+            document.getElementById('searchInput').value = title;
+            document.getElementById('suggestionsBox').style.display = 'none';
+            const found = products.filter(p => p.title === title);
+            const grid = document.getElementById('productGrid');
+            grid.innerHTML = found.map(p => `
+                <div class="product-card">
+                    <img src="${p.image}" class="product-image" alt="${p.title}">
+                    <div class="product-info">
+                        <div class="product-title">${p.title}</div>
+                        <div class="product-desc">${p.desc}</div>
+                        <a href="${p.link}" target="_blank" class="buy-btn">Buy on Daraz</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ADMIN PANEL MANAGEMENT
+        function renderAdmin() {
+            // Analytics Simulation
+            document.getElementById('views30h').innerText = Math.floor(Math.random() * 50) + 120;
+            document.getElementById('views30d').innerText = Math.floor(Math.random() * 500) + 1800;
+
+            // Categories list
+            const catList = document.getElementById('categoryManageList');
+            catList.innerHTML = categories.map(c => `
+                <span class="cat-chip">${c} <i class="fa-solid fa-xmark" style="margin-left:4px; cursor:pointer;" onclick="deleteCategory('${c}')"></i></span>
+            `).join('');
+
+            // Category Select Options
+            const pCatSelect = document.getElementById('pCategory');
+            pCatSelect.innerHTML = categories.filter(c => c !== "All").map(c => `<option value="${c}">${c}</option>`).join('');
+
+            // Products Select Options for Flash Sales
+            const fsProdSelect = document.getElementById('fsProducts');
+            fsProdSelect.innerHTML = products.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+
+            // Flash sales existing list
+            const fsList = document.getElementById('existingFlashSaleList');
+            fsList.innerHTML = flashSales.map(fs => `
+                <div style="background:#f5f5f5; padding:8px 12px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                    <span><strong>${fs.title}</strong> (${fs.productIds.length} items)</span>
+                    <button class="submit-btn" style="width:auto; background:#d9534f; padding:4px 8px;" onclick="deleteFlashSale('${fs.id}')">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        function addCategory() {
+            const input = document.getElementById('newCatInput');
+            const val = input.value.trim();
+            if (val && !categories.includes(val)) {
+                categories.push(val);
+                localStorage.setItem('storex_categories', JSON.stringify(categories));
+                input.value = '';
+                renderAdmin();
+            }
+        }
+
+        function deleteCategory(cat) {
+            categories = categories.filter(c => c !== cat);
+            localStorage.setItem('storex_categories', JSON.stringify(categories));
+            renderAdmin();
+        }
+
+        async function handleSaveFlashSale(e) {
+            e.preventDefault();
+            const title = document.getElementById('fsTitle').value;
+            const timer = document.getElementById('fsTimer').value;
+            const selectedOptions = Array.from(document.getElementById('fsProducts').selectedOptions).map(o => o.value);
+            
+            const bannerFile = document.getElementById('fsBannerInput').files[0];
+            let bannerUrl = "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1000&q=80";
+            if (bannerFile) {
+                bannerUrl = await readFileAsDataURL(bannerFile);
+            }
+
+            const imgFiles = Array.from(document.getElementById('fsImgFiles').files);
+            let galleryUrls = [];
+            for (let f of imgFiles) {
+                galleryUrls.push(await readFileAsDataURL(f));
+            }
+            if (galleryUrls.length === 0) {
+                galleryUrls = products.filter(p => selectedOptions.includes(p.id)).map(p => p.image);
+            }
+
+            const newFS = {
+                id: "fs_" + Date.now(),
+                title: title,
+                banner: bannerUrl,
+                images: galleryUrls,
+                timer: timer,
+                productIds: selectedOptions
+            };
+
+            flashSales.push(newFS);
+            localStorage.setItem('storex_flash_sales', JSON.stringify(flashSales));
+            alert("Flash Sale created successfully!");
+            e.target.reset();
+            renderAdmin();
+        }
+
+        function deleteFlashSale(id) {
+            flashSales = flashSales.filter(fs => fs.id !== id);
+            localStorage.setItem('storex_flash_sales', JSON.stringify(flashSales));
+            renderAdmin();
+        }
+
+        async function handleAddProduct(e) {
+            e.preventDefault();
+            const title = document.getElementById('pTitle').value;
+            const category = document.getElementById('pCategory').value;
+            const desc = document.getElementById('pDesc').value;
+            const link = document.getElementById('pLink').value;
+            const imgFile = document.getElementById('pImageFile').files[0];
+
+            let imgUrl = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80";
+            if (imgFile) {
+                imgUrl = await readFileAsDataURL(imgFile);
+            }
+
+            const newProduct = {
+                id: "p_" + Date.now(),
+                title,
+                category,
+                desc,
+                image: imgUrl,
+                link
+            };
+
+            products.push(newProduct);
+            localStorage.setItem('storex_products', JSON.stringify(products));
+            alert("Product added successfully!");
+            e.target.reset();
+            renderAdmin();
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>
