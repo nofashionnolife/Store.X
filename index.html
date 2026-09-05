@@ -478,6 +478,10 @@
                     <span id="fsPageTimer" class="flash-timer-badge" style="font-size: 14px; padding: 6px 14px;">Ends in: --:--:--</span>
                 </div>
                 <img id="fsPageBanner" src="" alt="Flash Sale Banner" style="width: 100%; max-height: 260px; object-fit: cover; border-radius: 6px; margin-bottom: 15px; display: none;">
+                
+                <!-- FLASH SALE GALLERY IMAGES -->
+                <div id="fsPageGallery" class="flash-preview-grid" style="margin-bottom: 15px;"></div>
+                
                 <p id="fsPageDesc" style="font-size: 13px; color: #555;">Exclusive discounts on selected items below!</p>
             </div>
 
@@ -499,8 +503,8 @@
                 <h3>Unique Visitors Dashboard</h3>
                 <div class="analytics-grid">
                     <div class="stat-card">
-                        <h4>Unique Views (Last 30 Hours)</h4>
-                        <div class="number" id="views30h">0</div>
+                        <h4>Unique Views (Last 24 Hours)</h4>
+                        <div class="number" id="views24h">0</div>
                     </div>
                     <div class="stat-card">
                         <h4>Unique Views (Last 30 Days)</h4>
@@ -509,16 +513,18 @@
                 </div>
             </div>
 
-            <!-- INSTANT HERO & LOGO IMAGE MANAGERS -->
+            <!-- INSTANT HERO & LOGO IMAGE MANAGERS WITH EXPLICIT SAVE BUTTONS -->
             <div class="admin-section">
                 <h3>Store Identity & Hero Background Image</h3>
                 <div class="form-group">
-                    <label>Upload Store PNG Logo (Instant Preview)</label>
-                    <input type="file" id="logoUploadInput" accept="image/png, image/jpeg" onchange="handleLogoSelect(event)">
+                    <label>Upload Store PNG Logo</label>
+                    <input type="file" id="logoUploadInput" accept="image/png, image/jpeg">
+                    <button type="button" class="submit-btn" style="margin-top: 8px;" onclick="saveLogo()">Save Logo</button>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-top: 15px;">
                     <label>Upload Top Background Hero Image</label>
-                    <input type="file" id="heroUploadInput" accept="image/*" onchange="handleHeroSelect(event)">
+                    <input type="file" id="heroUploadInput" accept="image/*">
+                    <button type="button" class="submit-btn" style="margin-top: 8px;" onclick="saveHeroImage()">Save Hero Image</button>
                 </div>
             </div>
 
@@ -548,8 +554,8 @@
                         <input type="file" id="fsBannerInput" accept="image/*">
                     </div>
                     <div class="form-group">
-                        <label>Upload Additional Flash Sale Gallery Images (2 to 3 images)</label>
-                        <input type="file" id="fsImgFiles" accept="image/*" multiple>
+                        <label>Upload Additional Flash Sale Gallery Images (Upload 2 to 3 images)</label>
+                        <input type="file" id="fsImgFiles" accept="image/*" multiple required>
                     </div>
                     <div class="form-group">
                         <label>Timer End Date & Time</label>
@@ -601,6 +607,12 @@
 
                     <button type="submit" class="submit-btn"><i class="fa-solid fa-plus"></i> Upload Product</button>
                 </form>
+            </div>
+
+            <!-- DELETE EXISTING PRODUCTS SECTION -->
+            <div class="admin-section">
+                <h3>Manage & Delete Existing Products</h3>
+                <div id="existingProductList" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
         </div>
     </div>
@@ -665,6 +677,34 @@
         let logoDataUrl = localStorage.getItem('storex_logo') || "";
         let heroDataUrl = localStorage.getItem('storex_hero') || "";
 
+        // VIEWER TRACKING LOGIC (24-hour rate limiting & 30-day view log)
+        function trackPageView() {
+            const now = Date.now();
+            const lastViewTime = parseInt(localStorage.getItem('storex_last_view_time') || '0', 10);
+            let viewsLog = JSON.parse(localStorage.getItem('storex_views_log')) || [];
+
+            // 24 hours = 86,400,000 milliseconds
+            if (now - lastViewTime >= 24 * 60 * 60 * 1000) {
+                viewsLog.push(now);
+                localStorage.setItem('storex_last_view_time', now.toString());
+                localStorage.setItem('storex_views_log', JSON.stringify(viewsLog));
+            }
+        }
+
+        function getAnalytics() {
+            const now = Date.now();
+            let viewsLog = JSON.parse(localStorage.getItem('storex_views_log')) || [];
+
+            // Filter views within last 24 hours and 30 days
+            const day24ms = 24 * 60 * 60 * 1000;
+            const days30ms = 30 * 24 * 60 * 60 * 1000;
+
+            const views24h = viewsLog.filter(timestamp => (now - timestamp) <= day24ms).length;
+            const views30d = viewsLog.filter(timestamp => (now - timestamp) <= days30ms).length;
+
+            return { views24h, views30d };
+        }
+
         // ROUTER SYSTEM
         function route() {
             const hash = window.location.hash;
@@ -674,11 +714,13 @@
                 document.getElementById('adminView').classList.add('active');
                 renderAdmin();
             } else if (hash.startsWith('#flash-sale')) {
+                trackPageView();
                 document.getElementById('flashSalePageView').classList.add('active');
                 const params = new URLSearchParams(hash.split('?')[1]);
                 const fsId = params.get('id');
                 renderFlashSalePage(fsId);
             } else {
+                trackPageView();
                 document.getElementById('storefrontView').classList.add('active');
                 renderStorefront();
             }
@@ -695,31 +737,31 @@
             applyStoreIdentity();
         });
 
-        // LOGO & HERO INSTANT UPLOADS
-        function handleLogoSelect(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                logoDataUrl = evt.target.result;
-                localStorage.setItem('storex_logo', logoDataUrl);
-                applyStoreIdentity();
-                alert('PNG Logo uploaded and applied immediately!');
-            };
-            reader.readAsDataURL(file);
+        // SAVE LOGO & HERO IMAGE VIA SAVE BUTTONS
+        async function saveLogo() {
+            const fileInput = document.getElementById('logoUploadInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a logo file to save.");
+                return;
+            }
+            logoDataUrl = await readFileAsDataURL(file);
+            localStorage.setItem('storex_logo', logoDataUrl);
+            applyStoreIdentity();
+            alert('Logo saved and updated across admin and customer panel!');
         }
 
-        function handleHeroSelect(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                heroDataUrl = evt.target.result;
-                localStorage.setItem('storex_hero', heroDataUrl);
-                applyStoreIdentity();
-                alert('Hero Banner image updated successfully!');
-            };
-            reader.readAsDataURL(file);
+        async function saveHeroImage() {
+            const fileInput = document.getElementById('heroUploadInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select a hero image file to save.");
+                return;
+            }
+            heroDataUrl = await readFileAsDataURL(file);
+            localStorage.setItem('storex_hero', heroDataUrl);
+            applyStoreIdentity();
+            alert('Hero Image saved and updated across customer panel!');
         }
 
         function applyStoreIdentity() {
@@ -817,6 +859,15 @@
                 bannerImg.style.display = "none";
             }
 
+            // Render Flash Sale Gallery Images
+            const galleryContainer = document.getElementById('fsPageGallery');
+            if (fs.images && fs.images.length > 0) {
+                galleryContainer.innerHTML = fs.images.map(img => `<img src="${img}" class="flash-preview-item" style="width: 120px; height: 120px;">`).join('');
+                galleryContainer.style.display = "flex";
+            } else {
+                galleryContainer.style.display = "none";
+            }
+
             const saleProducts = products.filter(p => fs.productIds.includes(p.id));
             const grid = document.getElementById('fsProductGrid');
             grid.innerHTML = saleProducts.map(p => `
@@ -869,9 +920,10 @@
 
         // ADMIN PANEL MANAGEMENT
         function renderAdmin() {
-            // Analytics Simulation
-            document.getElementById('views30h').innerText = Math.floor(Math.random() * 50) + 120;
-            document.getElementById('views30d').innerText = Math.floor(Math.random() * 500) + 1800;
+            // Real Analytics Tracking
+            const { views24h, views30d } = getAnalytics();
+            document.getElementById('views24h').innerText = views24h;
+            document.getElementById('views30d').innerText = views30d;
 
             // Categories list
             const catList = document.getElementById('categoryManageList');
@@ -887,14 +939,58 @@
             const fsProdSelect = document.getElementById('fsProducts');
             fsProdSelect.innerHTML = products.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
 
-            // Flash sales existing list
+            // Flash sales existing list with gallery preview
             const fsList = document.getElementById('existingFlashSaleList');
-            fsList.innerHTML = flashSales.map(fs => `
-                <div style="background:#f5f5f5; padding:8px 12px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
-                    <span><strong>${fs.title}</strong> (${fs.productIds.length} items)</span>
-                    <button class="submit-btn" style="width:auto; background:#d9534f; padding:4px 8px;" onclick="deleteFlashSale('${fs.id}')">Delete</button>
+            fsList.innerHTML = flashSales.map(fs => {
+                const galleryImgs = (fs.images || []).map(img => `<img src="${img}" style="width:30px; height:30px; object-fit:cover; border-radius:3px;">`).join(' ');
+                return `
+                    <div style="background:#f5f5f5; padding:8px 12px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong>${fs.title}</strong> (${fs.productIds.length} items)
+                            <div style="display:flex; gap:4px; margin-top:4px;">${galleryImgs}</div>
+                        </div>
+                        <button class="submit-btn" style="width:auto; background:#d9534f; padding:4px 8px;" onclick="deleteFlashSale('${fs.id}')">Delete</button>
+                    </div>
+                `;
+            }).join('');
+
+            // Existing products delete list
+            renderExistingProductsList();
+        }
+
+        function renderExistingProductsList() {
+            const productListContainer = document.getElementById('existingProductList');
+            if (products.length === 0) {
+                productListContainer.innerHTML = '<p style="font-size:12px; color:#888;">No products available.</p>';
+                return;
+            }
+
+            productListContainer.innerHTML = products.map(p => `
+                <div style="background:#f9f9f9; padding:10px; border-radius:4px; border:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img src="${p.image}" style="width:40px; height:40px; object-fit:cover; border-radius:4px;">
+                        <div>
+                            <strong style="font-size:13px;">${p.title}</strong>
+                            <div style="font-size:11px; color:#666;">${p.category}</div>
+                        </div>
+                    </div>
+                    <button class="submit-btn" style="width:auto; background:#d9534f; padding:6px 12px;" onclick="deleteProduct('${p.id}')">Delete Product</button>
                 </div>
             `).join('');
+        }
+
+        function deleteProduct(id) {
+            products = products.filter(p => p.id !== id);
+            localStorage.setItem('storex_products', JSON.stringify(products));
+            
+            // Clean up deleted products from active flash sales
+            flashSales.forEach(fs => {
+                fs.productIds = fs.productIds.filter(prodId => prodId !== id);
+            });
+            localStorage.setItem('storex_flash_sales', JSON.stringify(flashSales));
+
+            alert("Product deleted successfully!");
+            renderAdmin();
         }
 
         function addCategory() {
@@ -927,12 +1023,14 @@
             }
 
             const imgFiles = Array.from(document.getElementById('fsImgFiles').files);
+            if (imgFiles.length < 2 || imgFiles.length > 3) {
+                alert("Please upload between 2 and 3 gallery images for the flash sale.");
+                return;
+            }
+
             let galleryUrls = [];
             for (let f of imgFiles) {
                 galleryUrls.push(await readFileAsDataURL(f));
-            }
-            if (galleryUrls.length === 0) {
-                galleryUrls = products.filter(p => selectedOptions.includes(p.id)).map(p => p.image);
             }
 
             const newFS = {
@@ -946,7 +1044,7 @@
 
             flashSales.push(newFS);
             localStorage.setItem('storex_flash_sales', JSON.stringify(flashSales));
-            alert("Flash Sale created successfully!");
+            alert("Flash Sale created successfully with " + galleryUrls.length + " images!");
             e.target.reset();
             renderAdmin();
         }
