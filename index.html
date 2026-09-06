@@ -222,8 +222,8 @@ img{max-width:100%;display:block;}
 // 1. GENERAL STORE SETTINGS & DARAZ URL
 const SETTINGS = {
   siteName: 'Store.X',
-  logo: null,
-  logoWidth: 130,
+  logo: https://i.ibb.co/d4k0CyyS/Gemini-Generated-Image-n4696yn4696yn469-removebg-preview.png,
+  logoWidth: 200,
   logoLink: '#/',
   headerBg: '#FFFFFF',
   headerText: '#1F2328',
@@ -232,29 +232,29 @@ const SETTINGS = {
   gaId: '',
   hero: {
     enabled: true,
-    heading: 'Discover Deals You’ll Love',
-    subheading: 'Hand-picked products at prices worth clicking for.',
-    buttonText: 'Explore Products',
+    heading: 'Discover Quality Products at Unbeatable Everyday Prices',
+    subheading: 'Welcome to StoreX, your one-stop online destination for top-quality essentials and trendy finds. We bring you handpicked products, seamless online shopping, and fast delivery right to your doorstep. Explore our collection today and upgrade your shopping experience effortlessly.',
+    buttonText: 'Shop Now',
     buttonUrl: '#/category/all',
-    image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=1200&q=80',
-    desktopImage: null,
-    mobileImage: null,
-    overlay: 0.4,
+    image: 'null',
+    desktopImage: https://i.ibb.co/2Tr3sDm/Gemini-Generated-Image-qgxivlqgxivlqgxi.jpg,
+    mobileImage: https://i.ibb.co/H924bF5/Gemini-Generated-Image-qdvm0pqdvm0pqdvm.jpg,
+    overlay: 0,
     align: 'left',
-    height: 360,
-    buttonBgColor: '',
-    buttonTextColor: '',
+    height: 300,
+    buttonBgColor: '#FF6600',
+    buttonTextColor: '#FFFFFF',
     buttonWidth: '',
-    buttonPaddingY: 12,
-    buttonPaddingX: 22,
+    buttonPaddingY: 15,
+    buttonPaddingX: 25,
     buttonMarginTop: 0,
-    buttonAlign: 'left'
+    buttonAlign: 'Right'
   },
   footer: {
     about: 'Store.X curates the best finds on the web and hands you straight to Daraz to check out safely.',
     social: {
-      facebook: 'https://facebook.com',
-      instagram: 'https://instagram.com',
+      facebook: '',
+      instagram: '',
       tiktok: '',
       youtube: '',
       whatsapp: '',
@@ -270,10 +270,11 @@ const SETTINGS = {
   sections: [
     { id: 's1', type: 'hero', visible: true, title: '', subtitle: '' },
     { id: 's2', type: 'flashsale', visible: true, title: 'Flash Sale', subtitle: 'Mega deals — ending soon' },
-    { id: 's3', type: 'categories', visible: true, title: 'Shop by Category', subtitle: 'Find exactly what you need' },
-    { id: 's4', type: 'productCollection', visible: true, title: 'Featured Products', subtitle: 'Our top picks this week', config: { filter: 'featured', count: 6 } },
-    { id: 's5', type: 'productCollection', visible: true, title: 'Trending Now', subtitle: 'What everyone is buying', config: { filter: 'trending', count: 6 } },
-    { id: 's6', type: 'productCollection', visible: true, title: 'New Arrivals', subtitle: 'Just landed', config: { filter: 'newArrival', count: 6 } }
+    { id: 's3', type: 'productCollection', visible: true, title: 'Best Product', subtitle: 'Most Popular', config: { filter: 'All published', count: 1 } }
+    { id: 's4', type: 'categories', visible: true, title: 'Shop by Category', subtitle: 'Find exactly what you need' },
+    { id: 's5', type: 'productCollection', visible: true, title: 'Featured Products', subtitle: 'Our top picks this week', config: { filter: 'featured', count: 6 } },
+    { id: 's6', type: 'productCollection', visible: true, title: 'Trending Now', subtitle: 'What everyone is buying', config: { filter: 'trending', count: 6 } },
+    { id: 's7', type: 'productCollection', visible: true, title: 'New Arrivals', subtitle: 'Just landed', config: { filter: 'newArrival', count: 6 } }
   ]
 };
 
@@ -381,11 +382,105 @@ const BANNERS = [
 
 // 6. CUSTOM PAGES
 const PAGES = [
-  { id: 'p1', title: 'About Us', slug: 'about', content: 'Store.X curates products and redirects directly to Daraz.', status: 'published' },
-  { id: 'p2', title: 'Privacy Policy', slug: 'privacy-policy', content: 'Your privacy policy content goes here.', status: 'published' },
-  { id: 'p3', title: 'Terms & Conditions', slug: 'terms', content: 'Your terms and conditions go here.', status: 'published' },
-  { id: 'p4', title: 'Disclaimer', slug: 'disclaimer', content: 'Store.X is a product discovery site. All purchases are completed on Daraz.', status: 'published' }
-];
+  { id: 'p1', title: 'About Us', slug: 'about', content: 'Welcome to Store.X!
+
+Store.X is an exclusive, independent store operating directly on Daraz, owned and managed by Asim Ali Asif. We specialize in bringing top-quality items, daily essentials, and trending merchandise directly to our customers.
+
+Unlike open aggregators, Store.X sells products under our own brand umbrella on Daraz. Asim Ali Asif personally stands behind the quality, authenticity, and overall satisfaction of every item we offer. When you browse our catalog, you are selected products that we directly manage, package, and fulfill through our official Daraz store front.
+
+Our promise is simple: Premium product selection, transparent quality guarantee from Asim Ali Asif, and smooth delivery through Daraz's trusted fulfillment network.
+', status: 'published' },
+  { id: 'p2', title: 'Privacy Policy', slug: 'privacy-policy', content: 'Privacy Policy for Store.X
+
+At Store.X (operated by Asim Ali Asif on Daraz), protecting the privacy of our buyers is our utmost commitment. This Privacy Policy details how we handle site navigation and customer interaction.
+
+1. Ordering & Direct Store Execution
+When you browse Store.X and choose to make a purchase, your checkout and payment processing take place on Daraz under our official merchant store (Store.X). We do not collect or store your payment details or sensitive financial information on this website directly.
+
+2. Information Collection & Usage
+We may collect basic site analytics (such as IP address, device type, and page traffic) to enhance site performance. When you purchase our products through Daraz, order fulfillment details (name, shipping address, contact number) are safely processed according to Daraz's standard marketplace seller terms to deliver your items smoothly.
+
+3. Owner Commitment & Protection
+Store.X is fully managed by Asim Ali Asif. We are committed to protecting user trust both on this platform and through our seller interactions on Daraz.
+
+4. Cookies
+Store.X uses standard cookies to store visitor preferences and optimize browsing features. You can choose to disable cookies through your personal browser settings.
+
+5. Consent
+By using our website and navigating to our official Daraz storefront, you hereby consent to our Privacy Policy and agree to its terms.
+', status: 'published' },
+  { id: 'p3', title: 'Terms & Conditions', slug: 'terms', content: 'Terms & Conditions
+Terms & Conditions
+
+Welcome to Store.X!
+
+These Terms and Conditions govern the use of Store.X and the purchase of our products via our official Daraz store, owned and operated by Asim Ali Asif.
+
+1. Direct Sales & Guarantee
+Store.X is a dedicated merchant selling products directly on Daraz. Asim Ali Asif takes full personal responsibility and guarantee for the quality, accuracy, and authenticity of the products offered under our Store.X catalog.
+
+2. Purchasing via Daraz
+All final checkouts, order processing, and payment handling are conducted through our official Store.X merchant page on Daraz. While Daraz provides the trusted checkout and logistics delivery system, the responsibility for product specifications and quality guarantee rests with Asim Ali Asif / Store.X.
+
+3. Returns, Exchanges, and Quality Assurance
+We stand behind our products. In the event of any product defects or order queries, items can be returned or exchanged under our store's policy via Daraz’s standard customer support framework and our direct merchant guarantee.
+
+4. Intellectual Property
+All content, product branding, media, and text on Store.X belong exclusively to Asim Ali Asif and Store.X unless otherwise noted. Unauthorized replication is strictly prohibited.
+', status: 'published' },
+  { id: 'p4', title: 'Disclaimer', slug: 'disclaimer', content: 'Disclaimer for Store.X
+
+1. Product Ownership & Seller Guarantee
+Store.X is an official merchant store on Daraz, owned and operated by Asim Ali Asif. All products showcased are sold directly by us on our Daraz storefront with our personal commitment to quality and service.
+
+2. Price & Stock Availability
+While Asim Ali Asif and the Store.X team keep all pricing and stock accurate on this catalog, final pricing, applicable discounts, and delivery charges are dynamically verified at the time of checkout on our Daraz Store.X page.
+
+3. Fulfillment & Deliveries
+Orders placed through our Daraz storefront are dispatched and delivered using Daraz’s logistics network to ensure safe, traceable, and fast delivery to your destination. Asim Ali Asif guarantees that all dispatched items meet our high quality standards prior to dispatch.
+', status: 'published' }
+{ id: 'p5', title: 'Disclaimer', slug: 'FAQs', content: 'Frequently Asked Questions (FAQs)
+
+Welcome to the Store.X Help Center! Here are answers to the most common questions about our products, store operations, direct owner guarantee, and ordering through Daraz.
+
+---
+
+Q1: What is Store.X and how does it work?
+Store.X is an official direct-selling store operating on Daraz, owned and managed by Asim Ali Asif. On this website, we showcase our curated product catalog. When you click on any product, you will be redirected to our official Store.X storefront on Daraz to complete your order safely and securely.
+
+Q2: Are the products sold on Store.X directly owned and guaranteed by you?
+Yes, absolutely! Unlike general affiliate directories, all products listed on Store.X are directly managed and sold by us. Asim Ali Asif personally guarantees the quality, authenticity, and specifications of every item sold under our Store.X brand on Daraz.
+
+Q3: Why am I redirected to Daraz when I click on a product?
+We partner with Daraz to process transactions and handle shipping logistics. Daraz provides a secure payment environment, cash-on-delivery options, and reliable nationwide delivery, while Asim Ali Asif provides the actual quality products and seller guarantee.
+
+Q4: Do I need to create an account on this website to place an order?
+No. You do not need to register on our website to browse or order. When you select an item, you will checkout using your existing Daraz account.
+
+Q5: What payment options are available for buying Store.X products?
+Since checkout is processed through Daraz, you can choose from all Daraz-supported payment methods, including Cash on Delivery (COD), Credit/Debit Cards, JazzCash, EasyPaisa, and Daraz Wallet.
+
+Q6: How does the product quality guarantee from Asim Ali Asif work?
+Every product listed on Store.X undergoes a careful quality check before being listed and dispatched. Asim Ali Asif stands behind every order. If you receive an item that is damaged, defective, or not as described, you are covered under our direct quality promise in addition to Daraz's customer protection policies.
+
+Q7: What is the return and refund policy for Store.X items?
+All purchases made from Store.X are protected by Daraz's Easy Return Policy. If you receive a wrong, defective, or unsatisfactory product, you can initiate a return request on Daraz within the stipulated return window (7 to 14 days depending on product category) for a full refund or replacement.
+
+Q8: How long will it take to receive my order?
+Orders are dispatched via Daraz Express and trusted logistics partners. Standard delivery usually takes 2 to 5 business days, depending on your location across Pakistan. You can view the exact estimated delivery time at checkout on Daraz.
+
+Q9: How can I track my package after ordering?
+Once your order is confirmed on Daraz, you can easily track its shipping status in real-time under the "My Orders" section of your Daraz account or app.
+
+Q10: Are the prices on this website identical to the prices on Daraz?
+Yes! We strive to sync all product prices, special deals, and promotional discounts in real-time. However, in case of momentary price updates or limited-time Daraz mega sales, the final price shown on the Daraz checkout page applies.
+
+Q11: What should I do if I have a question about a product before buying?
+You can reach out to us directly through the "Chat with Seller" feature on our official Daraz Store.X store page. Asim Ali Asif and our customer care team are always available to help you with product details and recommendations.
+
+Q12: Who do I contact if there is an issue with my delivered order?
+If you face any issues with your delivered parcel, you can contact us via the Daraz chat interface or submit a support ticket directly through Daraz Customer Support. Asim Ali Asif ensures that every legitimate complaint is resolved swiftly to maintain 100% customer satisfaction.', status: 'published' }
+   ];
 
 /* ============================================================
    APPLICATION CORE LOGIC
