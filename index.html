@@ -157,7 +157,9 @@ img{max-width:100%;display:block;}
 .countdown .chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:8px 10px;min-width:52px;text-align:center;}
 .countdown .chip b{display:block;font-size:19px;font-family:'Space Grotesk';}
 .countdown .chip span{font-size:10px;color:rgba(255,255,255,.65);text-transform:uppercase;}
-.flash-visual{position:relative;background-size:cover;background-position:center;}
+.flash-visual{position:relative;background-size:cover;background-position:center;overflow:hidden;}
+.flash-visual-slide{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease;}
+.flash-visual-slide.active{opacity:1;}
 @media (max-width:720px){.flash{grid-template-columns:1fr;} .flash-visual{min-height:140px;order:-1;}}
 .flash-carousel{position:relative;overflow:hidden;border-radius:12px;}
 .flash-track{display:flex;transition:transform .6s ease;}
@@ -267,7 +269,19 @@ img{max-width:100%;display:block;}
 .swatch{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid var(--line);vertical-align:middle;margin-right:6px;}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:12px 18px;border-radius:8px;font-size:13.5px;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);}
 .help-note{font-size:12px;color:var(--ink-soft);background:#FFF8EE;border:1px solid #F0DDBB;padding:8px 10px;border-radius:6px;margin-bottom:14px;}
-@media (max-width:900px){.admin-shell{grid-template-columns:1fr;}.admin-sidebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:4px;padding:10px;}.admin-sidebar .brand{width:100%;}.admin-sidebar .group-label{display:none;}}
+.admin-hamburger{display:none;}
+.admin-drawer-overlay{display:none;}
+@media (max-width:900px){
+  .admin-shell{grid-template-columns:1fr;}
+  .admin-hamburger{display:inline-flex;align-items:center;justify-content:center;background:#1F2328;color:#fff;border:none;width:42px;height:42px;border-radius:8px;position:fixed;top:14px;left:14px;z-index:70;box-shadow:0 2px 12px rgba(0,0,0,.3);}
+  .admin-hamburger svg{width:22px;height:22px;}
+  .admin-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55;}
+  .admin-drawer-overlay.open{display:block;}
+  .admin-sidebar{position:fixed;top:0;left:0;height:100%;width:80%;max-width:290px;z-index:65;padding:20px 14px;overflow-y:auto;transform:translateX(-105%);transition:transform .25s ease;display:block;}
+  .admin-sidebar.open{transform:translateX(0);}
+  .admin-sidebar .group-label{display:block;}
+  .admin-main{padding:70px 16px 26px;}
+}
 </style>
 </head>
 <body>
@@ -332,6 +346,7 @@ const DEFAULT_SETTINGS = {
 let SETTINGS = null, PRODUCTS = [], CATEGORIES = [], FLASHSALES = [], BANNERS = [], MEDIA = [], PAGES = [];
 let ADMIN_UNLOCKED = false;
 let ADMIN_VIEW = 'dashboard';
+let ADMIN_DRAWER_OPEN = false;
 let MOBILE_DRAWER_OPEN = false, MOBILE_SEARCH_OPEN = false;
 let PD_ACTIVE_IMG = 0;
 
@@ -435,41 +450,6 @@ function showModal(contentHtml){
   document.body.appendChild(el);
 }
 
-function resizeImageFile(file, maxW){
-  return new Promise((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        let w = img.width, h = img.height;
-        if(w > maxW){ h = Math.round(h * (maxW/w)); w = maxW; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img,0,0,w,h);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-async function handleImageUpload(inputEl, cb){
-  const file = inputEl.files && inputEl.files[0];
-  if(!file) return;
-  if(!file.type.startsWith('image/')){ toast('Please choose an image file'); return; }
-  if(file.size > 8*1024*1024){ toast('Image too large (max 8MB)'); return; }
-  try{
-    const dataUrl = await resizeImageFile(file, 1600);
-    const entry = {id:uid(), name:file.name, dataUrl};
-    MEDIA.push(entry);
-    await saveKey(KEYS.media, MEDIA);
-    cb(entry.id);
-    toast('Image uploaded successfully');
-  }catch(e){ toast('Upload failed'); }
-}
 
 /* ================= ROUTER ================= */
 function route(){ return location.hash.replace(/^#/,'') || '/'; }
@@ -499,6 +479,7 @@ function render(){
   startCountdowns();
   initHeroSlider();
   initFlashCarousels();
+  initFlashVisuals();
 }
 
 /* ================= HEADER / FOOTER ================= */
@@ -642,11 +623,37 @@ function initHeroSlider(){
   }, 5000);
 }
 
+function flashImages(f){
+  return [f.banner, f.banner2, f.banner3].filter(Boolean).map(mediaSrc).filter(Boolean);
+}
+function flashVisualHtml(images){
+  if(!images.length) return `<div class="flash-visual"></div>`;
+  if(images.length===1) return `<div class="flash-visual" style="background-image:url('${images[0]}')"></div>`;
+  return `<div class="flash-visual flash-visual-auto" data-images='${esc(JSON.stringify(images))}'>
+    ${images.map((src,i)=>`<div class="flash-visual-slide ${i===0?'active':''}" style="background-image:url('${src}')"></div>`).join('')}
+  </div>`;
+}
+let FLASH_VISUAL_TIMERS = [];
+function initFlashVisuals(){
+  FLASH_VISUAL_TIMERS.forEach(t=>clearInterval(t));
+  FLASH_VISUAL_TIMERS = [];
+  document.querySelectorAll('.flash-visual-auto').forEach(el=>{
+    const slides = el.querySelectorAll('.flash-visual-slide');
+    if(slides.length<2) return;
+    let idx = 0;
+    const timer = setInterval(()=>{
+      slides[idx].classList.remove('active');
+      idx = (idx+1) % slides.length;
+      slides[idx].classList.add('active');
+    }, 3000);
+    FLASH_VISUAL_TIMERS.push(timer);
+  });
+}
+
 function flashSlideHtml(f){
-  const bg = f.banner ? `background-image:url('${mediaSrc(f.banner)}')` : '';
   return `<a href="#/flash-sale/${esc(f.slug)}" class="flash-slide">
       <div class="flash">
-        <div class="flash-visual" style="${bg}"></div>
+        ${flashVisualHtml(flashImages(f))}
         <div class="flash-info">
           <span class="flash-eyebrow">Flash Sale</span>
           <h3>${esc(f.title)}</h3>
@@ -873,7 +880,7 @@ function renderFlashSaleIndex(){
     ${sales.length? sales.map(f=>`
       <a href="#/flash-sale/${esc(f.slug)}" style="display:block;margin-bottom:16px;">
         <div class="flash" style="min-height:130px;">
-          <div class="flash-visual" style="${f.banner?`background-image:url('${mediaSrc(f.banner)}')`:''}"></div>
+          ${flashVisualHtml(flashImages(f))}
           <div class="flash-info"><span class="flash-eyebrow">${f.status==='active'?'Live now':'Ended'}</span><h3>${esc(f.title)}</h3><p>${esc(f.subtitle||'')}</p></div>
         </div>
       </a>`).join('') : `<div class="empty-state"><div class="icon">\u23F3</div><h3>No flash sales available</h3></div>`}
@@ -902,7 +909,7 @@ function renderFlashSalePage(slug){
   return `<div class="container" style="padding:30px 20px;">
     <div class="crumb"><a href="#/">Home</a> / <a href="#/flash-sale">Flash Sale</a> / ${esc(f.title)}</div>
     <div class="flash" style="margin-bottom:26px;">
-      <div class="flash-visual" style="${f.banner?`background-image:url('${mediaSrc(f.banner)}')`:''}"></div>
+      ${flashVisualHtml(flashImages(f))}
       <div class="flash-info">
         <span class="flash-eyebrow">${ended?'Ended':'Flash Sale'}</span>
         <h3>${esc(f.title)}</h3><p>${esc(f.description||f.subtitle||'')}</p>
@@ -969,6 +976,10 @@ function wireStorefrontEvents(){}
 function renderAdminRoot(){
   if(!ADMIN_UNLOCKED) return renderAdminLogin();
   return `<div class="admin-shell">
+    <button class="admin-hamburger" onclick="ADMIN_DRAWER_OPEN=true;render();" aria-label="Open admin menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="admin-drawer-overlay ${ADMIN_DRAWER_OPEN?'open':''}" onclick="ADMIN_DRAWER_OPEN=false;render();"></div>
     ${renderAdminSidebar()}
     <div class="admin-main">${renderAdminView()}</div>
   </div>`;
@@ -986,11 +997,11 @@ function renderAdminLogin(){
   </div></div>`;
 }
 
-function setAdminView(v){ ADMIN_VIEW=v; render(); }
+function setAdminView(v){ ADMIN_VIEW=v; ADMIN_DRAWER_OPEN=false; render(); }
 
 function renderAdminSidebar(){
   const item = (v,label)=>`<button class="navlink ${ADMIN_VIEW===v?'active':''}" onclick="setAdminView('${v}')">${label}</button>`;
-  return `<div class="admin-sidebar">
+  return `<div class="admin-sidebar ${ADMIN_DRAWER_OPEN?'open':''}">
     <div class="brand">Store<span class="x">.X</span> admin</div>
     ${item('dashboard','Dashboard')}
     <div class="group-label">Catalog</div>
@@ -1007,8 +1018,8 @@ function renderAdminSidebar(){
     ${item('pages','Custom Pages')}
     ${item('settings','Settings')}
     <div class="group-label">&nbsp;</div>
-    <a href="#/" class="navlink">\u2190 View storefront</a>
-    <button class="navlink" onclick="ADMIN_UNLOCKED=false;render();">Log out</button>
+    <a href="#/" class="navlink" onclick="ADMIN_DRAWER_OPEN=false;">\u2190 View storefront</a>
+    <button class="navlink" onclick="ADMIN_DRAWER_OPEN=false;ADMIN_UNLOCKED=false;render();">Log out</button>
   </div>`;
 }
 
@@ -1135,7 +1146,7 @@ function openProductModal(id){
         <div class="field full">
           <label>Product images (from your device)</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{addProductImage('${p.id}',id, ${isNew});})">
+            <input type="url" placeholder="Image URL yahan enter karein (https://...)" onchange="if(this.value){ addProductImage('${p.id}', this.value, ${isNew}); this.value=''; }">
             <div id="product-img-list-${p.id}" class="thumb-picker" style="margin-top:10px;">
               ${(p.images||[]).map(im=>`<div class="t ${p.mainImage===im?'sel':''}" onclick="setMainProductImage('${p.id}','${im}',${isNew})"><img src="${mediaSrc(im)}"></div>`).join('')}
             </div>
@@ -1238,7 +1249,7 @@ function openCategoryModal(id){
         <div class="field full">
           <label>Category image</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{ (${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=id; const prev=document.getElementById('cat-img-prev-${c.id}'); if(prev){prev.src=mediaSrc(id); prev.style.display='block';} })">
+            <input type="url" placeholder="Category Image URL yahan enter karein" onchange="const url=this.value; if(url){ (${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url; const prev=document.getElementById('cat-img-prev-${c.id}'); if(prev){prev.src=url; prev.style.display='block';} }">
             <img id="cat-img-prev-${c.id}" src="${c.image?mediaSrc(c.image):''}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;margin-top:8px;${c.image?'':'display:none;'}">
             <div class="upload-note">For a perfect fit in the box-style category grid, upload a square image \u2014 recommended 800 x 800px.</div>
           </div>
@@ -1285,7 +1296,7 @@ function adminFlashSales(){
 function deleteFlashSale(id){ if(!confirm('Delete this flash sale?')) return; FLASHSALES=FLASHSALES.filter(f=>f.id!==id); saveKey(KEYS.flashsales,FLASHSALES); toast('Flash sale deleted'); }
 
 function openFlashSaleModal(id){
-  const f = id ? FLASHSALES.find(x=>x.id===id) : {id:uid(),title:'',subtitle:'',slug:'',start:'',end:'',banner:null,description:'',status:'active',products:[],seo:{title:'',keywords:'',description:''}};
+  const f = id ? FLASHSALES.find(x=>x.id===id) : {id:uid(),title:'',subtitle:'',slug:'',start:'',end:'',banner:null,banner2:null,banner3:null,description:'',status:'active',products:[],seo:{title:'',keywords:'',description:''}};
   f.seo = f.seo || {title:'',keywords:'',description:''};
   const isNew = !id;
   if(isNew) window.__draftFlash = f;
@@ -1302,11 +1313,21 @@ function openFlashSaleModal(id){
         <div class="field"><label>Status</label><select name="status"><option value="active" ${f.status==='active'?'selected':''}>Active</option><option value="hidden" ${f.status==='hidden'?'selected':''}>Hidden / Ended</option></select></div>
         <div class="field full"><label>Description</label><textarea name="description">${esc(f.description)}</textarea></div>
         <div class="field full">
-          <label>Banner image</label>
+          <label>Flash Sale Images (up to 3 — auto-rotate every 3 seconds on the storefront)</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{ (${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')).banner=id; const prev=document.getElementById('flash-banner-prev'); if(prev){prev.src=mediaSrc(id); prev.style.display='block';} })">
-            <img id="flash-banner-prev" src="${f.banner?mediaSrc(f.banner):''}" style="width:120px;height:70px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner?'':'display:none;'}">
-            <div class="upload-note">Recommended banner size: 1200 x 600px for best display.</div>
+            <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;">Image 1 (required)</label>
+            <input type="url" placeholder="Flash Sale Image URL 1 (required)" value="${esc(f.banner||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner=url||null; const prev=document.getElementById('flash-banner-prev-1'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <img id="flash-banner-prev-1" src="${f.banner?mediaSrc(f.banner):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner?'':'display:none;'}">
+
+            <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 2 (optional)</label>
+            <input type="url" placeholder="Flash Sale Image URL 2 (optional)" value="${esc(f.banner2||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner2=url||null; const prev=document.getElementById('flash-banner-prev-2'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <img id="flash-banner-prev-2" src="${f.banner2?mediaSrc(f.banner2):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner2?'':'display:none;'}">
+
+            <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 3 (optional)</label>
+            <input type="url" placeholder="Flash Sale Image URL 3 (optional)" value="${esc(f.banner3||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner3=url||null; const prev=document.getElementById('flash-banner-prev-3'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <img id="flash-banner-prev-3" src="${f.banner3?mediaSrc(f.banner3):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner3?'':'display:none;'}">
+
+            <div class="upload-note">Recommended size: 1200 x 600px. Image 1 is required; Images 2 &amp; 3 are optional. If 2 or more images are added, they automatically rotate every 3 seconds on the storefront.</div>
           </div>
         </div>
       </div>
@@ -1365,6 +1386,7 @@ function removeFlashProduct(id, idx){
 function saveFlashForm(id, isNew){
   const form = document.getElementById('flash-form'); const fd = new FormData(form);
   const draft = getFlashDraft(id,isNew);
+  if(!draft.banner){ toast('Please add Flash Sale Image 1 (it is required)'); return; }
   const title = fd.get('title').trim();
   Object.assign(draft,{
     title, slug: slugify(fd.get('slug').trim()||title), subtitle: fd.get('subtitle').trim(),
@@ -1402,25 +1424,25 @@ function openBannerModal(id){
         <div class="field"><label>Visible</label><select name="visible"><option value="yes" ${b.visible?'selected':''}>Yes</option><option value="no" ${!b.visible?'selected':''}>No</option></select></div>
         <div class="field full"><label class="checkline"><input type="checkbox" name="heroSlider" ${b.heroSlider?'checked':''}> Include this banner in the Hero section's auto-scrolling slider</label></div>
         <div class="field full">
-          <label>Banner image (fallback / used if no separate mobile-desktop images below)</label>
+          <label>Banner Image URL (fallback / used if no separate mobile-desktop images below)</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{ (${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')).image=id; const prev=document.getElementById('banner-img-prev'); if(prev){prev.src=mediaSrc(id); prev.style.display='block';} })">
+            <input type="url" placeholder="Banner Image URL yahan enter karein (https://...)" value="${esc(b.image||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')); d.image=url||null; const prev=document.getElementById('banner-img-prev'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
             <img id="banner-img-prev" src="${b.image?mediaSrc(b.image):''}" style="width:140px;height:80px;object-fit:cover;border-radius:6px;margin-top:8px;${b.image?'':'display:none;'}">
             <div class="upload-note">Recommended banner size: 1200 x 600px.</div>
           </div>
         </div>
         <div class="field">
-          <label>Desktop / Laptop image (optional)</label>
+          <label>Desktop / Laptop Image URL (optional)</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{ (${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')).desktopImage=id; const prev=document.getElementById('banner-desktop-prev'); if(prev){prev.src=mediaSrc(id); prev.style.display='block';} })">
+            <input type="url" placeholder="Desktop Banner Image URL (optional)" value="${esc(b.desktopImage||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')); d.desktopImage=url||null; const prev=document.getElementById('banner-desktop-prev'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
             <img id="banner-desktop-prev" src="${b.desktopImage?mediaSrc(b.desktopImage):''}" style="width:120px;height:70px;object-fit:cover;border-radius:6px;margin-top:8px;${b.desktopImage?'':'display:none;'}">
             <div class="upload-note">Recommended: 1600 x 600px (wide).</div>
           </div>
         </div>
         <div class="field">
-          <label>Mobile image (optional)</label>
+          <label>Mobile Image URL (optional)</label>
           <div class="upload-box">
-            <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{ (${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')).mobileImage=id; const prev=document.getElementById('banner-mobile-prev'); if(prev){prev.src=mediaSrc(id); prev.style.display='block';} })">
+            <input type="url" placeholder="Mobile Banner Image URL (optional)" value="${esc(b.mobileImage||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftBanner:BANNERS.find(x=>x.id==='${b.id}')); d.mobileImage=url||null; const prev=document.getElementById('banner-mobile-prev'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
             <img id="banner-mobile-prev" src="${b.mobileImage?mediaSrc(b.mobileImage):''}" style="width:80px;height:100px;object-fit:cover;border-radius:6px;margin-top:8px;${b.mobileImage?'':'display:none;'}">
             <div class="upload-note">Recommended: 800 x 1000px (tall).</div>
           </div>
@@ -1494,17 +1516,32 @@ function addFlashSaleSectionModal(){
     <form onsubmit="event.preventDefault(); createFlashSaleSection(this);">
       <div class="form-grid">
         <div class="field full"><label>Which Flash Sale</label><select name="flashSaleId"><option value="">Auto (show all active flash sales)</option>${options}</select></div>
-        <div class="field full"><label>Position on homepage</label><select name="position"><option value="top">Top (start of homepage)</option><option value="bottom" selected>Bottom (end of homepage)</option></select></div>
+        <div class="field full"><label>Select Flash Sale Placement / Position</label>
+          <select name="position">
+            <option value="0">Top Flash Sale (1st position)</option>
+            <option value="1">2nd position</option>
+            <option value="2">3rd position</option>
+            <option value="3">4th position</option>
+            <option value="bottom" selected>Bottom Flash Sale (end of homepage)</option>
+          </select>
+        </div>
       </div>
       <div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn">Add Section</button></div>
     </form>`);
 }
 
+function insertSectionAtPosition(section, position){
+  const arr = SETTINGS.sections;
+  if(position==='bottom'){ arr.push(section); return; }
+  const idx = Math.max(0, Math.min(Number(position)||0, arr.length));
+  arr.splice(idx, 0, section);
+}
+
 function createFlashSaleSection(form){
   const fd = new FormData(form);
   const base = {id:uid(),type:'flashsale',visible:true,title:sectionTypeLabel('flashsale'),subtitle:'',config:{flashSaleId: fd.get('flashSaleId')||''}};
-  if(fd.get('position')==='top') SETTINGS.sections.unshift(base); else SETTINGS.sections.push(base);
-  saveKey(KEYS.settings,SETTINGS); closeModal(); toast('Flash sale section added');
+  insertSectionAtPosition(base, fd.get('position'));
+  saveKey(KEYS.settings,SETTINGS); closeModal(); toast('Flash sale section added at the selected position');
 }
 
 function editSectionModal(i){
@@ -1525,7 +1562,16 @@ function editSectionModal(i){
   } else if(s.type==='flashsale'){
     const fsOptions = FLASHSALES.map(f=>`<option value="${f.id}" ${(s.config&&s.config.flashSaleId)===f.id?'selected':''}>${esc(f.title)}</option>`).join('');
     extra = `<div class="field full"><label>Which Flash Sale</label><select name="flashSaleId"><option value="">Auto (show all active flash sales, carousel if 2+)</option>${fsOptions}</select></div>
-    <div class="field full"><label>Position on homepage</label><div style="display:flex;gap:8px;"><button type="button" class="btn small ghost" onclick="moveSectionToEdge(${i},'top')">Move to Top</button><button type="button" class="btn small ghost" onclick="moveSectionToEdge(${i},'bottom')">Move to Bottom</button></div></div>`;
+    <div class="field full"><label>Select Flash Sale Placement / Position</label>
+      <select name="position" onchange="moveSectionToPosition(${i}, this.value);">
+        <option value="">\u2014 Keep current position \u2014</option>
+        <option value="0">Top Flash Sale (1st position)</option>
+        <option value="1">2nd position</option>
+        <option value="2">3rd position</option>
+        <option value="3">4th position</option>
+        <option value="bottom">Bottom Flash Sale (end of homepage)</option>
+      </select>
+    </div>`;
   } else if(s.type==='categoryShowcase'){
     extra = `<div class="field"><label>Products per category</label><input type="number" name="count" value="${(s.config&&s.config.count)||3}"></div>`;
   } else if(s.type==='banner'){
@@ -1550,6 +1596,13 @@ function moveSectionToEdge(i,where){
   saveKey(KEYS.settings,SETTINGS); closeModal(); toast('Section moved to '+where);
 }
 
+function moveSectionToPosition(i, position){
+  if(position===''||position==null) return;
+  const arr = SETTINGS.sections; const [moved] = arr.splice(i,1);
+  insertSectionAtPosition(moved, position);
+  saveKey(KEYS.settings,SETTINGS); closeModal(); toast('Flash sale section moved to the selected position');
+}
+
 function saveSectionForm(i){
   const form=document.getElementById('section-form'); const fd=new FormData(form);
   const s = SETTINGS.sections[i];
@@ -1569,7 +1622,7 @@ function adminTheme(){
   <div class="admin-card">
     <h3 style="margin-top:0;">Logo Settings</h3>
     <div class="upload-box">
-      <input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{SETTINGS.logo=id; saveKey(KEYS.settings,SETTINGS);})">
+      <input type="url" placeholder="Logo Image URL yahan enter karein (https://...)" value="${esc(SETTINGS.logo||'')}" onchange="const url=this.value.trim(); SETTINGS.logo=url||null; saveKey(KEYS.settings,SETTINGS);">
       ${SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" style="height:40px;margin-top:8px;" id="theme-logo-preview">`:''}
       <div class="upload-note">Recommended logo size: 300 x 80px (transparent PNG works best).</div>
     </div>
@@ -1614,24 +1667,24 @@ function adminTheme(){
     </form>
     <div class="form-grid" style="margin-top:16px;">
       <div class="field">
-        <label>Desktop / Laptop Hero Image</label>
-        <div class="upload-box"><input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{SETTINGS.hero.desktopImage=id; saveKey(KEYS.settings,SETTINGS);})">
+        <label>Desktop / Laptop Hero Image URL</label>
+        <div class="upload-box"><input type="url" placeholder="Desktop Hero Image URL yahan enter karein (https://...)" value="${esc(h.desktopImage||'')}" onchange="const url=this.value.trim(); SETTINGS.hero.desktopImage=url||null; saveKey(KEYS.settings,SETTINGS);">
         ${h.desktopImage?`<img src="${mediaSrc(h.desktopImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 1920 x 700px (wide banner).</div>
         ${h.desktopImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.desktopImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
         </div>
       </div>
       <div class="field">
-        <label>Mobile Hero Image</label>
-        <div class="upload-box"><input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{SETTINGS.hero.mobileImage=id; saveKey(KEYS.settings,SETTINGS);})">
+        <label>Mobile Hero Image URL</label>
+        <div class="upload-box"><input type="url" placeholder="Mobile Hero Image URL yahan enter karein (https://...)" value="${esc(h.mobileImage||'')}" onchange="const url=this.value.trim(); SETTINGS.hero.mobileImage=url||null; saveKey(KEYS.settings,SETTINGS);">
         ${h.mobileImage?`<img src="${mediaSrc(h.mobileImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 800 x 1000px (tall, portrait).</div>
         ${h.mobileImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.mobileImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
         </div>
       </div>
       <div class="field full">
-        <label>Fallback Hero Image (used only if the mobile/desktop images above are not set)</label>
-        <div class="upload-box"><input type="file" accept="image/*" onchange="handleImageUpload(this, id=>{SETTINGS.hero.image=id; saveKey(KEYS.settings,SETTINGS);})">
+        <label>Fallback Hero Image URL (used only if the mobile/desktop images above are not set)</label>
+        <div class="upload-box"><input type="url" placeholder="Fallback Hero Image URL yahan enter karein (https://...)" value="${esc(h.image||'')}" onchange="const url=this.value.trim(); SETTINGS.hero.image=url||null; saveKey(KEYS.settings,SETTINGS);">
         ${h.image?`<img src="${mediaSrc(h.image)}" style="height:70px;margin-top:8px;border-radius:6px;" id="hero-img-prev">`:''}
         ${h.image?`<button type="button" class="btn small danger" style="margin-top:8px;" onclick="SETTINGS.hero.image=null;saveKey(KEYS.settings,SETTINGS);toast('Fallback hero image removed');">Remove Fallback Image</button>`:''}
         </div>
@@ -1702,8 +1755,13 @@ function saveNavItem(i, form){
 
 /* ---------- Media ---------- */
 function adminMedia(){
-  return `<div class="admin-topbar"><h1>Media Library</h1>
-    <label class="btn">+ Upload Image<input type="file" accept="image/*" style="display:none;" onchange="handleImageUpload(this, ()=>{render();})"></label>
+  return `<div class="admin-topbar"><h1>Media Library</h1></div>
+  <div class="admin-card">
+    <div class="upload-box">
+      <input type="url" id="media-url-input" placeholder="Image URL yahan enter karein (https://...)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMediaByUrl();}">
+      <button type="button" class="btn small" style="margin-top:8px;" onclick="addMediaByUrl()">+ Add Image URL</button>
+      <div class="upload-note">Paste an image URL and click "Add Image URL" to save it to your library for reuse across the site.</div>
+    </div>
   </div>
   <div class="admin-card">
     ${MEDIA.length? `<div class="thumb-picker" style="gap:14px;">
@@ -1711,8 +1769,18 @@ function adminMedia(){
         <img src="${mediaSrc(m.id)}" style="width:100px;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--line);">
         <button class="btn small danger" style="margin-top:4px;width:100%;" onclick="deleteMedia('${m.id}')">Delete</button>
       </div>`).join('')}
-    </div>` : '<p style="color:var(--ink-soft);">No uploaded images.</p>'}
+    </div>` : '<p style="color:var(--ink-soft);">No images added yet.</p>'}
   </div>`;
+}
+
+function addMediaByUrl(){
+  const input = document.getElementById('media-url-input');
+  const url = input && input.value.trim();
+  if(!url){ toast('Please enter an image URL'); return; }
+  if(!isValidHttpUrl(url)){ toast('Please enter a valid http(s) image URL'); return; }
+  MEDIA.push({id:uid(), name:url, dataUrl:url});
+  saveKey(KEYS.media, MEDIA);
+  toast('Image added to media library');
 }
 
 function deleteMedia(id){
