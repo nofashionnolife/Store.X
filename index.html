@@ -295,6 +295,23 @@ img{max-width:100%;display:block;}
 </head>
 <body>
 <div id="app"></div>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDJ3sBAEEX6kAnfDJJ2ICDyd3ZCrsbL6q8",
+  authDomain: "storex-df559.firebaseapp.com",
+  databaseURL: "https://storex-df559-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "storex-df559",
+  storageBucket: "storex-df559.firebasestorage.app",
+  messagingSenderId: "964374785242",
+  appId: "1:964374785242:web:26b3b117f5045aced609e3",
+  measurementId: "G-D74X7RSY7N"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const FIREBASE_DB = firebase.database();
+const FIREBASE_ROOT = 'storex';
+</script>
 <script>
 /* ============================================================
    Store.X — single-file storefront + admin (client-side persistence)
@@ -361,23 +378,62 @@ let PD_ACTIVE_IMG = 0;
 
 async function loadKey(key, fallback){
   try{
-    if(window.storage && typeof window.storage.get === 'function'){
-      const r = await window.storage.get(key,false); return r? JSON.parse(r.value) : fallback;
+    const snap = await FIREBASE_DB.ref(FIREBASE_ROOT+'/'+key).once('value');
+    const val = snap.val();
+    if(val !== null && val !== undefined) return val;
+    const local = localStorage.getItem(key);
+    if(local){
+      const parsed = JSON.parse(local);
+      await FIREBASE_DB.ref(FIREBASE_ROOT+'/'+key).set(parsed);
+      return parsed;
     }
-    const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback;
+    return fallback;
+  }catch(e){
+    console.error('Firebase load failed:', key, e);
+    try{ const local=localStorage.getItem(key); return local?JSON.parse(local):fallback; }
+    catch(_){ return fallback; }
   }
-  catch(e){ return fallback; }
 }
 async function saveKey(key, val){
   try{
-    if(window.storage && typeof window.storage.set === 'function'){
-      await window.storage.set(key, JSON.stringify(val), false);
-    } else {
-      localStorage.setItem(key, JSON.stringify(val));
-    }
+    await FIREBASE_DB.ref(FIREBASE_ROOT+'/'+key).set(val);
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(_){}
     applyTheme();
     render();
-  }catch(e){ console.error('save failed',key,e); }
+  }catch(e){
+    console.error('Firebase save failed:', key, e);
+    try{ localStorage.setItem(key, JSON.stringify(val)); }catch(_){}
+    toast('Could not sync with Firebase. Check database rules/connection.');
+  }
+}
+
+let FIREBASE_LISTENERS_STARTED = false;
+function startFirebaseRealtimeSync(){
+  if(FIREBASE_LISTENERS_STARTED) return;
+  FIREBASE_LISTENERS_STARTED = true;
+  const applyRemote = (key, value) => {
+    if(value === null || value === undefined) return;
+    try{
+      if(key===KEYS.settings){
+        SETTINGS = Object.assign({}, DEFAULT_SETTINGS, value, {
+          hero:Object.assign({},DEFAULT_SETTINGS.hero,value.hero||{}),
+          footer:Object.assign({},DEFAULT_SETTINGS.footer,value.footer||{},
+            {social:Object.assign({},DEFAULT_SETTINGS.footer.social,(value.footer&&value.footer.social)||{})})
+        });
+        applyTheme(); injectGA();
+      } else if(key===KEYS.products) PRODUCTS = Array.isArray(value)?value:Object.values(value||{});
+      else if(key===KEYS.categories) CATEGORIES = Array.isArray(value)?value:Object.values(value||{});
+      else if(key===KEYS.flashsales) FLASHSALES = Array.isArray(value)?value:Object.values(value||{});
+      else if(key===KEYS.banners) BANNERS = Array.isArray(value)?value:Object.values(value||{});
+      else if(key===KEYS.media) MEDIA = Array.isArray(value)?value:Object.values(value||{});
+      else if(key===KEYS.pages) PAGES = Array.isArray(value)?value:Object.values(value||{});
+      try{ localStorage.setItem(key, JSON.stringify(value)); }catch(_){}
+      render();
+    }catch(e){ console.error('Firebase realtime update failed:', key, e); }
+  };
+  Object.values(KEYS).forEach(key=>{
+    FIREBASE_DB.ref(FIREBASE_ROOT+'/'+key).on('value', snap=>applyRemote(key, snap.val()));
+  });
 }
 
 async function boot(){
@@ -396,6 +452,7 @@ async function boot(){
   injectGA();
   window.addEventListener('hashchange', render);
   render();
+  startFirebaseRealtimeSync();
 }
 
 function seedCategories(){ return []; }
