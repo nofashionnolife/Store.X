@@ -346,6 +346,39 @@ let BANNERS = [];
 let MEDIA = [];
 let PAGES = [];
 
+// UI state (storefront + admin). Declared here so every render() call can read them safely.
+let MOBILE_DRAWER_OPEN = false;
+let MOBILE_SEARCH_OPEN = false;
+let ADMIN_UNLOCKED = false;
+let ADMIN_VIEW = 'dashboard';
+let ADMIN_DRAWER_OPEN = false;
+let PD_ACTIVE_IMG = 0;
+
+/* ---------- Core utility helpers ---------- */
+// Generates a short, reasonably-unique id for products/categories/sections/etc.
+function uid(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+// Escapes text for safe insertion into innerHTML strings (prevents HTML/attr breakage & basic XSS).
+function esc(str){
+  return String(str==null ? '' : str).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+// Turns a title into a URL-friendly slug.
+function slugify(str){
+  return String(str||'').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'');
+}
+// Basic http/https URL validation used before sending an image URL to Cloudinary.
+function isValidHttpUrl(str){
+  try{
+    const u = new URL(str);
+    return u.protocol==='http:' || u.protocol==='https:';
+  }catch(_){ return false; }
+}
+
 const DEFAULT_SETTINGS = {
   siteName: 'Store.X',
   logo: '', logoLink: '#/', logoWidth: 150,
@@ -2067,7 +2100,7 @@ function adminSettings(){
         <div class="field"><label>Google Analytics ID</label><input type="text" name="gaId" value="${esc(s.gaId)}"></div>
         <div class="field"><label>Admin Passcode</label><input type="text" name="adminPass" value="${esc(s.adminPass)}"></div>
         <div class="field full"><label>Footer About Text</label><textarea name="footerAbout">${esc(s.footer.about)}</textarea></div>
-        <div class="field full"><label>Footer Copyright</label><input type="text" name="footerCopyright" value="${esc(s.footer.copyright)}</textarea></div>
+        <div class="field full"><label>Footer Copyright</label><input type="text" name="footerCopyright" value="${esc(s.footer.copyright)}"></div>
       </div>
       <button class="btn" style="margin-top:14px;" type="submit">Save General Settings</button>
     </form>
