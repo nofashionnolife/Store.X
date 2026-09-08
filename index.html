@@ -7,7 +7,6 @@
 <title>Store.X — Shop the Deals</title>
 <link id="site-favicon" rel="icon" type="image/png" href="">
 <link id="site-apple-icon" rel="apple-touch-icon" href="">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -326,16 +325,14 @@ img{max-width:100%;display:block;}
    Store.X — single-file storefront + admin (client-side persistence)
    ============================================================ */
 
-const SUPABASE_URL = 'https://roiwxjdvethytkgfrpws.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_aegiNBzOiCmE2cY6XxNmBQ_IWaeQ1dF';
-const SUPABASE_TABLE = 'storex_data';
 const CLOUDINARY_CLOUD_NAME = 'u5bybnjc';
 const CLOUDINARY_UPLOAD_PRESET = 'storex_preset';
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+const CLOUDINARY_IMAGE_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+const CLOUDINARY_RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
 const CLOUDINARY_TRANSFORM = 'f_auto,q_auto:good,dpr_auto';
-let SUPABASE_CLIENT = null;
-let SUPABASE_SYNC_TIMER = null;
-let SUPABASE_SYNC_BUSY = false;
+const CLOUDINARY_STATE_FOLDER = 'storex-state';
+let CLOUDINARY_SYNC_BUSY = false;
+let CLOUDINARY_SYNC_TIMER = null;
 
 // Global application state. These declarations are required before boot().
 let SETTINGS = null;
@@ -386,7 +383,7 @@ const DEFAULT_SETTINGS = {
   favicon: '', gaId: '', adminPass: 'storex-admin', darazStoreUrl: '',
   hero: { image:'', desktopImage:'', mobileImage:'', title:'Shop the Deals', subtitle:'Discover great products and deals.', buttonText:'Shop Now', buttonLink:'#/' },
   footer: { about:'Store.X is a product discovery site.', copyright:'© Store.X', social:{} },
-  search: { trending: [] },
+  search: { trending: [], maxSuggestions: 10, letterSuggestions: {} },
   nav: [],
   sections: [],
   mediaSizing: { categoryHeight:130, productRatio:'1/1', flashHeight:360, promoHeight:260 }
@@ -403,69 +400,67 @@ const KEYS = {
   pages:'storex-pages-v2'
 };
 
-function supabaseConfigured(){
-  return !!(SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes('YOUR_SUPABASE') && !SUPABASE_ANON_KEY.includes('YOUR_SUPABASE'));
-}
-function initSupabase(){
-  try{
-    if(supabaseConfigured() && window.supabase?.createClient) SUPABASE_CLIENT=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-  }catch(e){console.warn('Supabase unavailable; local mode remains active.',e);}
-}
 function localRead(key,fallback){
   try{const r=localStorage.getItem(key);return r?JSON.parse(r):fallback;}catch(_){return fallback;}
 }
 function localWrite(key,val){
-  try{localStorage.setItem(key,JSON.stringify(val));}catch(_){}
+  try{localStorage.setItem(key,JSON.stringify(val));}catch(_){ }
 }
-async function loadFromSupabase(key){
-  if(!SUPABASE_CLIENT)return null;
+function cloudinaryStatePublicUrl(key, bustCache=true){
+  const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_STATE_FOLDER}/${safe}.json${bustCache?'?v='+Date.now():''}`;
+}
+async function cloudinaryUploadJson(key,val){
+  const blob=new Blob([JSON.stringify(val)],{type:'application/json'});
+  const fd=new FormData();
+  fd.append('file',blob,`${String(key).replace(/[^A-Za-z0-9._-]/g,'_')}.json`);
+  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+  fd.append('folder',CLOUDINARY_STATE_FOLDER);
+  fd.append('public_id',String(key).replace(/[^A-Za-z0-9._-]/g,'_')+'.json');
+  const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd});
+  let data={}; try{data=await res.json();}catch(_){ }
+  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || ('Cloudinary state upload HTTP '+res.status));
+  return data.secure_url;
+}
+async function loadFromCloudinary(key){
   try{
-    const {data,error}=await SUPABASE_CLIENT.from(SUPABASE_TABLE).select('value').eq('key',key).maybeSingle();
-    if(error)throw error; return data?data.value:null;
-  }catch(e){console.warn('Supabase read skipped:',key,e.message||e);return null;}
+    const res=await fetch(cloudinaryStatePublicUrl(key,true),{cache:'no-store'});
+    if(!res.ok)return null;
+    return await res.json();
+  }catch(e){console.warn('Cloudinary state read skipped:',key,e.message||e);return null;}
 }
-async function saveToSupabase(key,val){
-  if(!SUPABASE_CLIENT)return false;
-  try{
-    const {error}=await SUPABASE_CLIENT.from(SUPABASE_TABLE).upsert({key,value:val,updated_at:new Date().toISOString()},{onConflict:'key'});
-    if(error)throw error; return true;
-  }catch(e){console.warn('Supabase save skipped:',key,e.message||e);return false;}
+async function saveToCloudinary(key,val){
+  try{await cloudinaryUploadJson(key,val);return true;}
+  catch(e){console.warn('Cloudinary state save skipped:',key,e.message||e);return false;}
 }
-/* Local-first boot: the storefront never waits for Supabase. */
 async function loadKey(key,fallback){return localRead(key,fallback);}
 async function saveKey(key,val){
   localWrite(key,val); applyTheme(); render();
-  const ok=await saveToSupabase(key,val);
-  if(!ok && supabaseConfigured()) toast('Saved locally. Supabase sync will retry.');
+  const ok=await saveToCloudinary(key,val);
+  if(!ok) toast('Saved locally. Cloudinary state sync failed; check the upload preset allows RAW files.');
 }
-async function syncFromSupabase(forceRender=false){
-  if(!SUPABASE_CLIENT||SUPABASE_SYNC_BUSY)return;
-  SUPABASE_SYNC_BUSY=true;
+async function syncFromCloudinary(forceRender=false){
+  if(CLOUDINARY_SYNC_BUSY)return;
+  CLOUDINARY_SYNC_BUSY=true;
   try{
     const keys=[KEYS.settings,KEYS.products,KEYS.categories,KEYS.flashsales,KEYS.banners,KEYS.media,KEYS.pages];
     let changed=false;
     for(const key of keys){
-      const remote=await loadFromSupabase(key);
+      const remote=await loadFromCloudinary(key);
       if(remote!==null && JSON.stringify(remote)!==localStorage.getItem(key)){localWrite(key,remote);changed=true;}
     }
     if(changed||forceRender){
       SETTINGS=await loadKey(KEYS.settings,DEFAULT_SETTINGS);
-      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{
-        hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
-        footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),
-        search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
-        mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
-      });
+      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})});
       PRODUCTS=await loadKey(KEYS.products,[]); CATEGORIES=await loadKey(KEYS.categories,seedCategories());
-      FLASHSALES=await loadKey(KEYS.flashsales,[]); BANNERS=await loadKey(KEYS.banners,[]);
-      MEDIA=await loadKey(KEYS.media,[]); PAGES=await loadKey(KEYS.pages,seedPages());
+      FLASHSALES=await loadKey(KEYS.flashsales,[]); BANNERS=await loadKey(KEYS.banners,[]); MEDIA=await loadKey(KEYS.media,[]); PAGES=await loadKey(KEYS.pages,seedPages());
       applyTheme(); render();
     }
-  }finally{SUPABASE_SYNC_BUSY=false;}
+  }finally{CLOUDINARY_SYNC_BUSY=false;}
 }
-function startSupabaseSync(){
-  if(SUPABASE_SYNC_TIMER)clearInterval(SUPABASE_SYNC_TIMER);
-  if(SUPABASE_CLIENT)SUPABASE_SYNC_TIMER=setInterval(()=>syncFromSupabase(false),15000);
+function startCloudinarySync(){
+  if(CLOUDINARY_SYNC_TIMER)clearInterval(CLOUDINARY_SYNC_TIMER);
+  CLOUDINARY_SYNC_TIMER=setInterval(()=>syncFromCloudinary(false),30000);
 }
 
 function cloudinaryOptimizedUrl(url, width){
@@ -485,7 +480,7 @@ async function cloudinaryUploadFile(file){
   const fd=new FormData();
   fd.append('file',file);
   fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
-  const res=await fetch(CLOUDINARY_UPLOAD_URL,{method:'POST',body:fd});
+  const res=await fetch(CLOUDINARY_IMAGE_UPLOAD_URL,{method:'POST',body:fd});
   let data={}; try{data=await res.json();}catch(_){ }
   if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || ('Cloudinary HTTP '+res.status));
   return cloudinaryOptimizedUrl(data.secure_url);
@@ -507,16 +502,24 @@ async function uploadImageUrlToCloudinary(rawUrl, label='Image'){
     return await cloudinaryUploadFile(blob);
   }catch(e){
     // Important: never break the storefront just because Cloudinary cannot import an external URL.
-    // Keep the original public URL so Firebase can still sync it to every customer device.
+    // Keep the original public URL so the storefront can still use it if Cloudinary cannot import it.
     console.warn(label+' kept as original public URL:',e);
     return url;
   }
 }
 
+async function rememberMediaUrl(url){
+  if(!url)return;
+  if(!MEDIA.some(m=>m.dataUrl===url || m.name===url)){
+    MEDIA.push({id:uid(),name:url,dataUrl:url});
+    localWrite(KEYS.media,MEDIA);
+    saveToCloudinary(KEYS.media,MEDIA).catch(()=>{});
+  }
+}
 async function handleCloudinaryFileInput(input,callback){
   const file=input.files&&input.files[0]; if(!file)return;
   input.disabled=true;
-  try{const stored=await cloudinaryUploadFile(file);callback(stored);toast('File uploaded to Cloudinary and optimized.');}
+  try{const stored=await cloudinaryUploadFile(file);await rememberMediaUrl(stored);callback(stored);toast('File uploaded to Cloudinary, saved to Media Library and optimized.');}
   catch(e){toast('Cloudinary upload failed: '+e.message);}
   finally{input.disabled=false;}
 }
@@ -525,8 +528,9 @@ async function handleImageUrlInput(input, callback){
   const old=input.value; input.disabled=true; input.dataset.originalPlaceholder=input.placeholder; input.placeholder='Connecting image...';
   try{
     const stored=await uploadImageUrlToCloudinary(url);
+    await rememberMediaUrl(stored);
     callback(stored);
-    toast(isCloudinaryUrl(stored)?'Image uploaded to Cloudinary, optimized and synced.':'Image URL saved and synced to customers.');
+    toast(isCloudinaryUrl(stored)?'Image uploaded to Cloudinary, saved to Media Library and applied.':'Image URL saved and added to Media Library.');
   }catch(e){ toast('Image upload failed: '+e.message); input.value=old; }
   finally{ input.disabled=false; input.placeholder=input.dataset.originalPlaceholder||'Image URL'; }
 }
@@ -539,13 +543,13 @@ async function processImageField(input,getTarget,prop,previewId){
     const target=getTarget(); if(!target) throw new Error('Image target is no longer available');
     target[prop]=storedUrl;
     const prev=document.getElementById(previewId); if(prev){prev.src=storedUrl;prev.style.display='block';}
-    toast(isCloudinaryUrl(storedUrl)?'Image uploaded to Cloudinary and optimized.':'Image URL saved; Firebase will sync it to customers.');
+    toast(isCloudinaryUrl(storedUrl)?'Image uploaded to Cloudinary and saved.':'Image URL saved.');
   }catch(e){input.value=old;toast('Image upload failed: '+e.message);}
   finally{input.disabled=false;input.placeholder=input.dataset.originalPlaceholder||'Image URL';}
 }
 
 async function boot(){
-  initSupabase();
+  
   SETTINGS = await loadKey(KEYS.settings, DEFAULT_SETTINGS);
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, SETTINGS, {
     hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
@@ -564,8 +568,8 @@ async function boot(){
   window.addEventListener('hashchange', render);
   render();
   applyMediaSizing();
-  startSupabaseSync();
-  setTimeout(()=>syncFromSupabase(false),250);
+  startCloudinarySync();
+  setTimeout(()=>syncFromCloudinary(false),350);
 }
 
 function seedCategories(){ return []; }
@@ -684,12 +688,23 @@ function getSearchCorpus(){
   CATEGORIES.forEach(c=>{if(c.status!=='hidden')out.push(c.name);});
   return [...new Set(out.filter(Boolean))];
 }
+const BUILTIN_LETTER_SUGGESTIONS={
+ a:['airpods','android phone','abaya','analog watch'],b:['bluetooth speaker','backpack','beauty','bedsheet'],c:['charger','camera','casual shoes','cosmetics'],d:['dress','decor','desk lamp','duffle bag'],e:['earbuds','electric kettle','eyewear','electronics'],f:['fashion','fan','fitness','flash sale'],g:['gaming','gift','gloves','gadget'],h:['headphones','hoodie','handbag','home decor'],i:['iphone','iron','induction cooker','innerwear'],j:['jewelry','jeans','jacket','joggers'],k:['kitchen','kurta','kids','keyboard'],l:['laptop','led lights','lawn','lipstick'],m:['mobile','makeup','men shoes','mouse'],n:['necklace','night suit','notebook','new arrivals'],o:['office chair','oppo','organizer','outdoor'],p:['phone','power bank','perfume','purse'],q:['quilt','queen bedsheet','quick charger'],r:['ramadan','router','running shoes','ring'],s:['smartwatch','shoes','skincare','speaker'],t:['t-shirt','trending','tablet','travel bag'],u:['usb cable','under 1000','utensils','utility'],v:['vivo','vacuum cleaner','wallet','winter wear'],w:['watch','wireless earbuds','women fashion','wallet'],x:['xiaomi','xbox','xtra deals'],y:['yoga','youth fashion','yellow dress'],z:['zara style','zipper bag','zainab market']
+};
 function searchSuggestions(q){
-  const query=(q||'').trim().toLowerCase(); if(!query)return [];
+  const query=(q||'').trim().toLowerCase();
+  if(!query){return [];}
   const words=query.split(/\s+/).filter(Boolean);
-  return getSearchCorpus().map(v=>({v,score:words.reduce((n,w)=>n+(v.toLowerCase().includes(w)?(v.toLowerCase().startsWith(w)?3:1):0),0)}))
+  const configured=SETTINGS.search?.letterSuggestions||{};
+  const custom=Object.values(configured).flat();
+  const corpus=[...getSearchCorpus(),...custom,...Object.values(BUILTIN_LETTER_SUGGESTIONS).flat()];
+  return [...new Set(corpus.filter(Boolean))].map(v=>({v,score:words.reduce((n,w)=>{const x=v.toLowerCase();return n+(x.startsWith(w)?4:(x.includes(w)?2:0));},0)}))
     .filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.v.length-b.v.length)
-    .slice(0,Number(SETTINGS.search?.maxSuggestions)||8).map(x=>x.v);
+    .slice(0,Number(SETTINGS.search?.maxSuggestions)||10).map(x=>x.v);
+}
+function letterSuggestions(){
+  const custom=SETTINGS.search?.letterSuggestions||{};
+  return Object.fromEntries(Object.keys(BUILTIN_LETTER_SUGGESTIONS).map(k=>[k,[...(custom[k]||[]),...BUILTIN_LETTER_SUGGESTIONS[k]]].filter(Boolean).slice(0,12)));
 }
 function trendingSearches(){return (SETTINGS.search?.trending||DEFAULT_SETTINGS.search.trending||[]).filter(Boolean).slice(0,12);}
 function openSearchSuggestions(input){
@@ -1288,6 +1303,33 @@ function adminDashboard(){
   </div>`;
 }
 
+/* ---------- Reusable admin image picker ---------- */
+let MEDIA_PICKER_CALLBACK=null;
+function openMediaPicker(callback){
+  MEDIA_PICKER_CALLBACK=callback;
+  showModal(`<h2>Select image from Media Library</h2>
+    <p style="font-size:12.5px;color:var(--ink-soft);">Choose an existing Cloudinary image. The selected image is immediately applied to the current field.</p>
+    ${MEDIA.length?`<div class="thumb-picker" style="gap:12px;">${MEDIA.map(m=>`<button type="button" class="t" style="width:90px;height:90px;padding:0;background:#fff;" onclick="selectMediaForField('${m.id}')"><img src="${mediaSrc(m.id)}" alt=""></button>`).join('')}</div>`:'<div class="empty-state"><div class="icon">🖼️</div><h3>No media yet</h3><p>Upload an image in Media Library first.</p></div>'}
+    <div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal();MEDIA_PICKER_CALLBACK=null;">Cancel</button></div>`);
+}
+function selectMediaForField(id){
+  const url=mediaSrc(id);
+  const cb=MEDIA_PICKER_CALLBACK; MEDIA_PICKER_CALLBACK=null; closeModal();
+  if(typeof cb==='function')cb(url);
+}
+function adminImageControls(label,current,onSelectJs,previewId,extraNote=''){
+  const safePreview=previewId||('img-prev-'+uid());
+  return `<div class="upload-box">
+    <input type="url" value="${esc(current||'')}" placeholder="Paste image URL..." onchange="if(this.value){const input=this;handleImageUrlInput(input,url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display=url?'block':'none';}});}">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <label class="btn small" style="display:inline-flex;align-items:center;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display='block';}})"></label>
+      <button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display='block';}})">Choose from Media Library</button>
+    </div>
+    <img id="${safePreview}" src="${current?mediaSrc(current):''}" style="max-width:180px;max-height:90px;object-fit:contain;border-radius:6px;margin-top:8px;${current?'':'display:none;'}">
+    ${extraNote?`<div class="upload-note">${extraNote}</div>`:''}
+  </div>`;
+}
+
 /* ---------- Products ---------- */
 function adminProducts(){
   return `<div class="admin-topbar"><h1>Products</h1><button class="btn" onclick="openProductModal()">+ Add Product</button></div>
@@ -1362,6 +1404,8 @@ function openProductModal(id){
           <label>Product images (from your device)</label>
           <div class="upload-box">
             <input type="url" placeholder="Image URL yahan enter karein (https://...)" onchange="if(this.value){ handleImageUrlInput(this, url=>{ addProductImage('${p.id}', url, ${isNew}); this.value=''; }); }">
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>addProductImage('${p.id}',url,${isNew}))"></label>
+            <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>addProductImage('${p.id}',url,${isNew}))">Choose from Media Library</button>
             <div id="product-img-list-${p.id}" class="thumb-picker" style="margin-top:10px;">
               ${(p.images||[]).map(im=>`<div class="t ${p.mainImage===im?'sel':''}" onclick="setMainProductImage('${p.id}','${im}',${isNew})"><img src="${mediaSrc(im)}"></div>`).join('')}
             </div>
@@ -1465,6 +1509,8 @@ function openCategoryModal(id){
           <label>Category image</label>
           <div class="upload-box">
             <input type="url" placeholder="Category Image URL yahan enter karein" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ (${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url; const prev=document.getElementById('cat-img-prev-${c.id}'); if(prev){prev.src=url; prev.style.display='block';} }); }">
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{(${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url;document.getElementById('cat-img-prev-${c.id}').src=url;document.getElementById('cat-img-prev-${c.id}').style.display='block';})"></label>
+            <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{(${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url;document.getElementById('cat-img-prev-${c.id}').src=url;document.getElementById('cat-img-prev-${c.id}').style.display='block';})">Choose from Media Library</button>
             <img id="cat-img-prev-${c.id}" src="${c.image?mediaSrc(c.image):''}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;margin-top:8px;${c.image?'':'display:none;'}">
             <div class="upload-note">For a perfect fit in the box-style category grid, upload a square image \u2014 recommended 800 x 800px.</div>
           </div>
@@ -1533,14 +1579,20 @@ function openFlashSaleModal(id){
           <div class="upload-box">
             <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;">Image 1 (required)</label>
             <input type="url" placeholder="Flash Sale Image URL 1 (required)" value="${esc(f.banner||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner=url||null; const prev=document.getElementById('flash-banner-prev-1'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner=url;const prev=document.getElementById('flash-banner-prev-1');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner=url;const prev=document.getElementById('flash-banner-prev-1');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-1" src="${f.banner?mediaSrc(f.banner):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner?'':'display:none;'}">
 
             <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 2 (optional)</label>
             <input type="url" placeholder="Flash Sale Image URL 2 (optional)" value="${esc(f.banner2||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner2=url||null; const prev=document.getElementById('flash-banner-prev-2'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner2=url;const prev=document.getElementById('flash-banner-prev-2');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner2=url;const prev=document.getElementById('flash-banner-prev-2');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-2" src="${f.banner2?mediaSrc(f.banner2):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner2?'':'display:none;'}">
 
             <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 3 (optional)</label>
             <input type="url" placeholder="Flash Sale Image URL 3 (optional)" value="${esc(f.banner3||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner3=url||null; const prev=document.getElementById('flash-banner-prev-3'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner3=url;const prev=document.getElementById('flash-banner-prev-3');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner3=url;const prev=document.getElementById('flash-banner-prev-3');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-3" src="${f.banner3?mediaSrc(f.banner3):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner3?'':'display:none;'}">
 
             <div class="upload-note">Recommended size: 1200 x 600px. Image 1 is required; Images 2 &amp; 3 are optional. If 2 or more images are added, they automatically rotate every 3 seconds on the storefront.</div>
@@ -1649,10 +1701,13 @@ function openBannerModal(id){
         <div class="field"><label>Button URL / Link</label><input type="text" name="buttonUrl" value="${esc(b.buttonUrl)}" placeholder="#/category/all or https://..."></div>
         <div class="field"><label>Visible</label><select name="visible"><option value="yes" ${b.visible?'selected':''}>Yes</option><option value="no" ${!b.visible?'selected':''}>No</option></select></div>
         <div class="field full"><label class="checkline"><input type="checkbox" name="heroSlider" ${b.heroSlider?'checked':''}> Include in Hero slider</label></div>
-        <div class="field full"><label>Fallback image URL</label><input type="url" name="image" value="${esc(b.image||'')}" placeholder="https://..." ></div>
+        <div class="field full"><label>Fallback image URL</label><input type="url" name="image" value="${esc(b.image||'')}" placeholder="https://..." >
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})">Choose from Media Library</button></div></div>
         <div class="field full"><label>Upload image directly to Cloudinary</label><input type="file" accept="image/*" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></div>
         <div class="field"><label>Desktop image URL</label><input type="url" name="desktopImage" value="${esc(b.desktopImage||'')}" placeholder="Optional"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload desktop<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})">Choose from Media</button></div>
         <div class="field"><label>Mobile image URL</label><input type="url" name="mobileImage" value="${esc(b.mobileImage||'')}" placeholder="Optional"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload mobile<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})">Choose from Media</button></div>
       </div>
       <fieldset class="seo-fieldset"><legend>Banner Design — Full Control</legend>
         <div class="form-grid">
@@ -1846,6 +1901,7 @@ function adminTheme(){
     <div class="upload-box">
       <input type="file" accept="image/png,image/jpeg,image/webp,image/x-icon" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);})">
       <input type="url" style="margin-top:8px;width:100%;" placeholder="Or paste favicon URL" value="${esc(SETTINGS.favicon||'')}" onchange="if(this.value){const input=this;handleImageUrlInput(input,url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);});}">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
       ${SETTINGS.favicon?`<img src="${mediaSrc(SETTINGS.favicon)}" style="width:64px;height:64px;object-fit:contain;margin:10px auto 0;border:1px solid var(--line);border-radius:8px;">`:''}
       ${SETTINGS.favicon?`<button type="button" class="btn small danger" style="margin-top:8px;" onclick="SETTINGS.favicon=null;saveKey(KEYS.settings,SETTINGS);">Remove Favicon</button>`:''}
     </div>
@@ -1867,6 +1923,7 @@ function adminTheme(){
     <h3 style="margin-top:0;">Logo Settings</h3>
     <div class="upload-box">
       <input type="url" placeholder="Logo Image URL yahan enter karein (https://...)" value="${esc(SETTINGS.logo||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.logo=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
       ${SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" style="height:40px;margin-top:8px;" id="theme-logo-preview">`:''}
       <div class="upload-note">Recommended logo size: 300 x 80px (transparent PNG works best).</div>
     </div>
@@ -1913,6 +1970,7 @@ function adminTheme(){
       <div class="field">
         <label>Desktop / Laptop Hero Image URL</label>
         <div class="upload-box"><input type="url" placeholder="Desktop Hero Image URL yahan enter karein (https://...)" value="${esc(h.desktopImage||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.desktopImage=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.desktopImage?`<img src="${mediaSrc(h.desktopImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 1920 x 700px (wide banner).</div>
         ${h.desktopImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.desktopImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
@@ -1921,6 +1979,7 @@ function adminTheme(){
       <div class="field">
         <label>Mobile Hero Image URL</label>
         <div class="upload-box"><input type="url" placeholder="Mobile Hero Image URL yahan enter karein (https://...)" value="${esc(h.mobileImage||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.mobileImage=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.mobileImage?`<img src="${mediaSrc(h.mobileImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 800 x 1000px (tall, portrait).</div>
         ${h.mobileImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.mobileImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
@@ -1929,6 +1988,7 @@ function adminTheme(){
       <div class="field full">
         <label>Fallback Hero Image URL (used only if the mobile/desktop images above are not set)</label>
         <div class="upload-box"><input type="url" placeholder="Fallback Hero Image URL yahan enter karein (https://...)" value="${esc(h.image||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.image=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.image?`<img src="${mediaSrc(h.image)}" style="height:70px;margin-top:8px;border-radius:6px;" id="hero-img-prev">`:''}
         ${h.image?`<button type="button" class="btn small danger" style="margin-top:8px;" onclick="SETTINGS.hero.image=null;saveKey(KEYS.settings,SETTINGS);toast('Fallback hero image removed');">Remove Fallback Image</button>`:''}
         </div>
@@ -2004,6 +2064,7 @@ function adminMedia(){
     <div class="upload-box">
       <input type="url" id="media-url-input" placeholder="Image URL yahan enter karein (https://...)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMediaByUrl();}">
       <button type="button" class="btn small" style="margin-top:8px;" onclick="addMediaByUrl()">+ Add Image URL</button>
+      <label class="btn small" style="margin-top:8px;">+ Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{MEDIA.push({id:uid(),name:url,dataUrl:url});saveKey(KEYS.media,MEDIA);toast('Image added to Media Library');})"></label>
       <div class="upload-note">Paste an image URL and click "Add Image URL" to save it to your library for reuse across the site.</div>
     </div>
   </div>
@@ -2090,9 +2151,8 @@ function adminSettings(){
   const s=SETTINGS;
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
-    <div class="help-note"><b>Fast loading:</b> The site now renders from local cache first. Supabase is an optional cloud persistence/backup layer and is contacted after the first paint, so an unconfigured Supabase backend never blocks the storefront.</div>
-    <div class="help-note"><b>Media:</b> Images remain on Cloudinary. Only their Cloudinary URLs/metadata are saved in Supabase; the actual image files are not moved into Supabase.</div>
-    <div class="help-note"><b>Supabase table:</b> Create <code>storex_data</code> with <code>key text primary key, value jsonb, updated_at timestamptz</code>, then enter your URL and anon key in the constants at the top of this file.</div>
+    <div class="help-note"><b>Cloudinary:</b> Images are uploaded to Cloudinary and can be reused anywhere in the admin panel through the Media Library.</div>
+    <div class="help-note"><b>Cloud data sync:</b> Store settings, products, categories, banners, flash sales, pages and media metadata are cached locally and synced as JSON files to Cloudinary. Your Cloudinary unsigned upload preset must allow RAW uploads for cross-device syncing to work.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
@@ -2108,9 +2168,11 @@ function adminSettings(){
   <div class="admin-card">
     <h3 style="margin-top:0;">Search — Trending Searches</h3>
     <p style="font-size:12.5px;color:var(--ink-soft);">These appear at the top of search and when the search box is opened. Suggestions are also generated automatically from product titles, tags and categories.</p>
-    <form onsubmit="event.preventDefault();const fd=new FormData(this);SETTINGS.search=Object.assign({},SETTINGS.search,{trending:fd.get('trending').split(',').map(x=>x.trim()).filter(Boolean),maxSuggestions:Number(fd.get('maxSuggestions'))||8});saveKey(KEYS.settings,SETTINGS);toast('Search settings saved');">
+    <form onsubmit="event.preventDefault();const fd=new FormData(this);const letters={};'abcdefghijklmnopqrstuvwxyz'.split('').forEach(k=>{letters[k]=(fd.get('letter_'+k)||'').split(',').map(x=>x.trim()).filter(Boolean);});SETTINGS.search=Object.assign({},SETTINGS.search,{trending:(fd.get('trending')||'').split(',').map(x=>x.trim()).filter(Boolean),maxSuggestions:Number(fd.get('maxSuggestions'))||10,letterSuggestions:letters});saveKey(KEYS.settings,SETTINGS);toast('Search settings saved');">
       <div class="field full"><label>Trending searches (comma separated)</label><textarea name="trending" style="min-height:90px;">${esc((s.search?.trending||[]).join(', '))}</textarea></div>
-      <div class="field"><label>Max live suggestions</label><input type="number" min="3" max="20" name="maxSuggestions" value="${Number(s.search?.maxSuggestions)||8}"></div>
+      <div class="field"><label>Max live suggestions</label><input type="number" min="3" max="20" name="maxSuggestions" value="${Number(s.search?.maxSuggestions)||10}"></div>
+      <div class="field full"><label>Custom suggestions for each letter / keyword</label><div class="form-grid">${'abcdefghijklmnopqrstuvwxyz'.split('').map(k=>`<div class="field"><label>${k.toUpperCase()}</label><input type="text" name="letter_${k}" value="${esc(((s.search?.letterSuggestions||{})[k]||[]).join(', '))}" placeholder="e.g. ${BUILTIN_LETTER_SUGGESTIONS[k].slice(0,3).join(', ')}"></div>`).join('')}</div></div>
+      <p style="font-size:12px;color:var(--ink-soft);">The search box also includes built-in keyword suggestions for every letter and combines them with your product titles, tags and categories.</p>
       <button class="btn" style="margin-top:10px;" type="submit">Save Search Settings</button>
     </form>
   </div>`;
