@@ -41,7 +41,7 @@ img{max-width:100%;display:block;}
 
 /* ---------- Header ---------- */
 #site-header{background:var(--header-bg);color:var(--header-text);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:40;}
-.header-row{display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:center;padding:14px 0;}
+.header-row{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;gap:18px;align-items:center;padding:14px 0;}
 .logo-wrap{display:flex;align-items:center;gap:10px;min-width:0;}
 .logo-wrap img{object-fit:contain;}
 .logo-fallback{font-family:'Space Grotesk';font-weight:700;font-size:22px;white-space:nowrap;}
@@ -75,7 +75,7 @@ img{max-width:100%;display:block;}
 .main-nav{display:flex;gap:22px;align-items:center;white-space:nowrap;}
 .main-nav a{font-size:14px;font-weight:600;padding:6px 2px;border-bottom:2px solid transparent;}
 .main-nav a:hover{border-color:var(--primary);}
-.mobile-toggle,.mobile-search-toggle{display:none;background:none;border:none;padding:8px;color:var(--header-text);}
+.mobile-toggle{display:inline-flex;background:none;border:none;padding:8px;color:var(--header-text);align-items:center;justify-content:center;order:4}.mobile-search-toggle{display:none;background:none;border:none;padding:8px;color:var(--header-text);}
 .mobile-toggle svg,.mobile-search-toggle svg{width:24px;height:24px;}
 .mobile-drawer{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:60;}
 .mobile-drawer.open{display:block;}
@@ -86,7 +86,7 @@ img{max-width:100%;display:block;}
   .search-wrap{display:contents;}
   .main-nav{display:none;}
   .mobile-toggle{display:inline-flex;order:1;justify-self:start;}
-  .header-row{grid-template-columns:auto auto 1fr;padding:10px 0;}
+  .header-row{grid-template-columns:auto auto 1fr auto;padding:10px 0;}
   .logo-wrap{order:2;padding-left:4px;}
   .search-form{display:none;order:4;grid-column:1/-1;margin-top:8px;max-width:none;}
   .search-form.mobile-open{display:flex;}
@@ -114,6 +114,13 @@ img{max-width:100%;display:block;}
 .btn.ghost{background:none;color:var(--ink);border:1.5px solid var(--line);}
 .btn.danger{background:#B3261E;color:#fff;}
 .btn.danger:hover{background:#8f1e18;}
+.daraz-promo{display:flex;align-items:center;gap:14px;border:1px solid rgba(0,0,0,.08);overflow:hidden;box-shadow:0 4px 14px rgba(20,20,20,.05);}
+.daraz-promo-image{width:76px;height:58px;flex:0 0 76px;border-radius:7px;overflow:hidden;background:#fff;display:flex;align-items:center;justify-content:center;}
+.daraz-promo-image img{width:100%;height:100%;object-fit:cover;}
+.daraz-promo-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;}
+.daraz-promo-copy strong{font-size:16px;line-height:1.2;}
+.daraz-promo-copy span{font-size:12.5px;opacity:.72;}
+@media(max-width:480px){.daraz-promo{gap:9px;padding:10px!important;}.daraz-promo-image{width:52px;height:42px;flex-basis:52px;}.daraz-promo-copy strong{font-size:13px;}.daraz-promo-copy span{font-size:10.5px;}.daraz-promo .btn{padding:7px 10px;font-size:11px;}}
 
 /* ---------- Sections ---------- */
 .section{padding:44px 0;}
@@ -325,84 +332,117 @@ img{max-width:100%;display:block;}
    Store.X — single-file storefront + admin (client-side persistence)
    ============================================================ */
 
-const CLOUDINARY_CLOUD_NAME = 'u5bybnjc';
-const CLOUDINARY_UPLOAD_PRESET = 'storex_preset';
-const CLOUDINARY_IMAGE_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-const CLOUDINARY_RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
-// IMPORTANT: Cloudinary does not allow direct unsigned REST uploads to overwrite an existing asset.
-// Put your secure server/serverless endpoint here. The endpoint must accept POST JSON:
-// { key: string, data: any } and perform a SIGNED Cloudinary raw upload with overwrite=true.
-// Leave empty only for local-cache mode.
-const CLOUDINARY_SYNC_ENDPOINT = ''; // e.g. https://your-worker.example.com/storex-sync
-const CLOUDINARY_TRANSFORM = 'f_auto,q_auto:good,dpr_auto';
-const CLOUDINARY_STATE_FOLDER = 'storex-state';
-let CLOUDINARY_SYNC_BUSY = false;
-let CLOUDINARY_SYNC_TIMER = null;
-let CLOUDINARY_SYNC_QUEUE = Promise.resolve();
-let CLOUDINARY_LAST_SYNC = 0;
-let CLOUDINARY_LAST_BACKUP = 0;
-let CLOUDINARY_LAST_BACKUP_FINGERPRINT = '';
-let CLOUDINARY_BACKUP_BUSY = false;
-const CLOUDINARY_SYNC_INTERVAL = 5000; // storefront clients check for admin changes every 5 seconds
-const CLOUDINARY_BACKUP_INTERVAL = 15000; // scroll backup throttle
-const CLOUDINARY_STATE_CACHE_BUSTER = () => Date.now().toString();
+/* ============================================================
+   Store.X — self-contained HTML configuration
+   ============================================================
+   No cloud backup, Supabase, API, or remote state-sync is used.
+   The values in DEMO_CONFIG below are the source of truth for this file.
+   Admin edits update the storefront immediately in this open page.
+   To make an edit permanent for every visitor, edit DEMO_CONFIG in this
+   HTML file and publish/deploy the updated HTML.
+   ============================================================ */
 
-// Global application state. These declarations are required before boot().
-let SETTINGS = null;
-let PRODUCTS = [];
-let CATEGORIES = [];
-let FLASHSALES = [];
-let BANNERS = [];
-let MEDIA = [];
-let PAGES = [];
+const LOCAL_ADMIN_PERSISTENCE = false; // false = HTML configuration is authoritative
+// ---------- Runtime/UI state ----------
+let SETTINGS=null, PRODUCTS=[], CATEGORIES=[], FLASHSALES=[], BANNERS=[], MEDIA=[], PAGES=[];
+let MOBILE_DRAWER_OPEN=false, MOBILE_SEARCH_OPEN=false;
+let ADMIN_UNLOCKED=false, ADMIN_VIEW='dashboard', ADMIN_DRAWER_OPEN=false;
+let PD_ACTIVE_IMG=0, DRAG_IDX=null;
+let HERO_SLIDER_TIMER=null, FLASH_CAROUSEL_TIMERS=[];
 
-// UI state (storefront + admin). Declared here so every render() call can read them safely.
-let MOBILE_DRAWER_OPEN = false;
-let MOBILE_SEARCH_OPEN = false;
-let ADMIN_UNLOCKED = false;
-let ADMIN_VIEW = 'dashboard';
-let ADMIN_DRAWER_OPEN = false;
-let PD_ACTIVE_IMG = 0;
+// ---------- Core utility helpers ----------
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
+function esc(str){ return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function slugify(str){ return String(str||'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function isValidHttpUrl(str){ try{ const u=new URL(str); return u.protocol==='http:'||u.protocol==='https:'; }catch(_){ return false; } }
+function fmtMoney(value){ const n=Number(value); if(!Number.isFinite(n)) return ''; return 'Rs. '+n.toLocaleString('en-PK'); }
 
-/* ---------- Core utility helpers ---------- */
-// Generates a short, reasonably-unique id for products/categories/sections/etc.
-function uid(){
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const LOCAL_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+function localRead(key,fallback){
+  if(!LOCAL_ADMIN_PERSISTENCE) return fallback;
+  try{const r=localStorage.getItem(key);return r?JSON.parse(r):fallback;}catch(_){return fallback;}
 }
-// Escapes text for safe insertion into innerHTML strings (prevents HTML/attr breakage & basic XSS).
-function esc(str){
-  return String(str==null ? '' : str).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-// Turns a title into a URL-friendly slug.
-function slugify(str){
-  return String(str||'').toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g,'-')
-    .replace(/^-+|-+$/g,'');
-}
-// Basic http/https URL validation used before sending an image URL to Cloudinary.
-function isValidHttpUrl(str){
-  try{
-    const u = new URL(str);
-    return u.protocol==='http:' || u.protocol==='https:';
-  }catch(_){ return false; }
+function localWrite(key,val){
+  if(!LOCAL_ADMIN_PERSISTENCE) return;
+  try{localStorage.setItem(key,JSON.stringify(val));}catch(_){}
 }
 
-const DEFAULT_SETTINGS = {
-  siteName: 'Store.X',
-  logo: '', logoLink: '#/', logoWidth: 150,
-  primaryColor: '#F57224', headerBg: '#FFFFFF', headerText: '#1F2328',
-  favicon: '', gaId: '', adminPass: 'storex-admin', darazStoreUrl: '',
-  hero: { image:'', desktopImage:'', mobileImage:'', title:'Shop the Deals', subtitle:'Discover great products and deals.', buttonText:'Shop Now', buttonLink:'#/' },
-  footer: { about:'Store.X is a product discovery site.', copyright:'© Store.X', social:{} },
-  search: { trending: [], maxSuggestions: 10, letterSuggestions: {} },
-  nav: [],
-  sections: [],
-  mediaSizing: { categoryHeight:130, productRatio:'1/1', flashHeight:360, promoHeight:260 }
-};
+/* ---------- Local image handling ---------- */
+function handleLocalFileInput(input,callback){
+  const file=input.files&&input.files[0]; if(!file)return;
+  if(file.size>LOCAL_IMAGE_MAX_BYTES){toast('Image is too large. Use an image under 4 MB.');return;}
+  input.disabled=true;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const dataUrl=String(reader.result||'');
+      if(!dataUrl.startsWith('data:image/')) throw new Error('Unsupported image file');
+      rememberMediaUrl(dataUrl);
+      callback(dataUrl);
+      toast('Image loaded into this HTML session ✓');
+    }catch(e){toast('Image could not be loaded: '+e.message);}
+    finally{input.disabled=false;}
+  };
+  reader.onerror=()=>{input.disabled=false;toast('Could not read the image file.');};
+  reader.readAsDataURL(file);
+}
+async function handleImageUrlInput(input,callback){
+  const url=(input.value||'').trim(); if(!url)return;
+  if(!isValidHttpUrl(url) && !url.startsWith('data:image/')){toast('Please enter a valid http(s) image URL');return;}
+  await rememberMediaUrl(url);
+  callback(url);
+  toast('Image URL applied ✓');
+}
+async function processImageField(input,getTarget,prop,previewId){
+  const url=(input.value||'').trim(); if(!url)return;
+  if(!isValidHttpUrl(url) && !url.startsWith('data:image/')){toast('Please enter a valid image URL');return;}
+  const target=getTarget(); if(!target){toast('Image target is no longer available');return;}
+  target[prop]=url;
+  const prev=document.getElementById(previewId);
+  if(prev){prev.src=url;prev.style.display='block';}
+  await rememberMediaUrl(url);
+  toast('Image URL saved ✓');
+}
+async function rememberMediaUrl(url){
+  if(!url)return;
+  if(!MEDIA.some(m=>m.dataUrl===url || m.name===url)){
+    MEDIA.push({id:uid(),name:url,dataUrl:url});
+    await saveKey(KEYS.media,MEDIA);
+  }
+}
+function mediaSrc(id){ if(!id)return ''; const m=MEDIA.find(x=>x.id===id); return m ? m.dataUrl : (typeof id==='string'&&(id.startsWith('data:')||id.startsWith('http'))?id:''); }
 
-
+function demoImage(label,bg='#F2F0EB',fg='#1F2328'){
+  const safe=String(label).replace(/[&<>"]/g,'');
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900"><rect width="900" height="900" rx="48" fill="${bg}"/><circle cx="450" cy="330" r="170" fill="${fg}" opacity=".10"/><rect x="205" y="245" width="490" height="270" rx="36" fill="${fg}" opacity=".16"/><circle cx="450" cy="380" r="92" fill="${fg}" opacity=".24"/><text x="450" y="610" text-anchor="middle" font-family="Arial" font-size="48" font-weight="700" fill="${fg}">${safe}</text><text x="450" y="665" text-anchor="middle" font-family="Arial" font-size="25" fill="${fg}" opacity=".7">STORE.X DEMO</text></svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
+}
+function seedCategories(){
+  return [
+    {id:'cat-mobiles',name:'Mobiles',slug:'mobiles',description:'Phones, tablets and mobile accessories',image:'media-cat-1',icon:'📱',order:1,status:'visible',seo:{title:'Mobiles | Store.X',description:'Shop mobile products.',keywords:'mobiles, phones'}},
+    {id:'cat-fashion',name:'Fashion',slug:'fashion',description:'Trending styles for everyone',image:'media-cat-2',icon:'👕',order:2,status:'visible',seo:{title:'Fashion | Store.X',description:'Shop fashion deals.',keywords:'fashion, clothes'}},
+    {id:'cat-beauty',name:'Beauty',slug:'beauty',description:'Beauty and personal care',image:'media-cat-3',icon:'💄',order:3,status:'visible',seo:{title:'Beauty | Store.X',description:'Beauty products and deals.',keywords:'beauty, skincare'}},
+    {id:'cat-home',name:'Home & Living',slug:'home-living',description:'Useful products for your home',image:'media-cat-4',icon:'🏠',order:4,status:'visible',seo:{title:'Home & Living | Store.X',description:'Home products.',keywords:'home, living'}},
+    {id:'cat-electronics',name:'Electronics',slug:'electronics',description:'Smart gadgets and electronics',image:'media-cat-5',icon:'🎧',order:5,status:'visible',seo:{title:'Electronics | Store.X',description:'Electronics deals.',keywords:'electronics, gadgets'}},
+    {id:'cat-accessories',name:'Accessories',slug:'accessories',description:'Everyday accessories and essentials',image:'media-cat-6',icon:'⌚',order:6,status:'visible',seo:{title:'Accessories | Store.X',description:'Accessories deals.',keywords:'accessories'}}
+  ];
+}
+function seedPages(){
+  return [
+    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Store.X</h2><p>Store.X helps shoppers discover useful products, trending deals and special offers in one clean storefront.</p><p>Edit this content from the Custom Pages admin control or directly in the HTML source.</p>',status:'published',style:{}},    {id:'page-contact',title:'Contact',slug:'contact',content:'<h2>Contact Store.X</h2><p>Add your contact details, WhatsApp number, email or social links here.</p>',status:'published',style:{}},
+    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>This demo storefront is self-contained and does not send admin changes to a cloud database.</p>',status:'published',style:{}},
+    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms & Conditions</h2><p>Store.X is a product discovery storefront. Review each destination before purchasing.</p>',status:'published',style:{}},
+    {id:'page-disclaimer',title:'Disclaimer',slug:'disclaimer',content:'<h2>Disclaimer</h2><p>Demo product listings are examples. Replace them with your own products, links and content before publishing.</p>',status:'published',style:{}}
+  ];
+}
+// ============================================================
+// EDITABLE HTML-SOURCE SETTINGS
+// Change these values directly in this HTML file when you want
+// permanent content/design changes in the published storefront.
+// The Admin Panel below exposes the same areas for live editing
+// while this file is open. No Cloudinary/Supabase/backend is used.
+// ============================================================
 const KEYS = {
   settings:'storex-settings-v2',
   products:'storex-products-v2',
@@ -413,350 +453,130 @@ const KEYS = {
   pages:'storex-pages-v2'
 };
 
-function localRead(key,fallback){
-  try{const r=localStorage.getItem(key);return r?JSON.parse(r):fallback;}catch(_){return fallback;}
-}
-function localWrite(key,val){
-  try{localStorage.setItem(key,JSON.stringify(val));}catch(_){ }
-}
-function cloudinaryStatePublicUrl(key, bustCache=true){
-  const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
-  const base=`https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_STATE_FOLDER}/${safe}.json`;
-  return bustCache ? `${base}?v=${Date.now()}&cb=${Math.random().toString(36).slice(2)}` : base;
-}
+const DEFAULT_SETTINGS = {
+  siteName:'Store.X',
+  logo:'', logoLink:'#/', logoWidth:150,
+  primaryColor:'#F57224', headerBg:'#FFFFFF', headerText:'#1F2328',
+  favicon:'', gaId:'', adminPass:'storex-admin', darazStoreUrl:'',
+  hero:{
+    enabled:true, image:'', desktopImage:'', mobileImage:'',
+    title:'Shop the Deals', subtitle:'Discover great products and deals.',
+    heading:'Shop the Deals', subheading:'Discover great products and deals.',
+    buttonText:'Shop Now', buttonLink:'#/', buttonUrl:'#/',
+    height:360, overlay:.30, align:'center',
+    buttonBgColor:'#F57224', buttonTextColor:'#FFFFFF',
+    buttonPaddingY:12, buttonPaddingX:22, buttonMarginTop:0, buttonWidth:'', buttonAlign:'left'
+  },
+  footer:{about:'Store.X is a product discovery site.',copyright:'© Store.X',social:{}},
+  darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
+  search:{trending:[],maxSuggestions:10,letterSuggestions:{}},
+  nav:[], sections:[],
+  mediaSizing:{categoryHeight:130,productRatio:'1/1',flashHeight:360,promoHeight:260}
+};
 
-/*
- * Cloudinary is the shared source of truth. localStorage is only a fast cache.
- * Browser-safe synchronization is intentionally done with an UNSIGNED upload
- * preset; no Cloudinary API secret is ever embedded in this HTML file.
- */
-async function cloudinaryFetchWithTimeout(url, options={}, timeoutMs=20000){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),timeoutMs);
-  try{
-    return await fetch(url,Object.assign({},options,{signal:controller.signal,cache:'no-store'}));
-  }finally{ clearTimeout(timer); }
-}
-
-async function cloudinaryUnsignedBackup(key,val,reason='change'){
-  // Unsigned uploads cannot overwrite. Instead, every backup is a UNIQUE RAW
-  // asset. This means Cloudinary really receives a physical backup even when
-  // no signed server endpoint is configured. The latest-backup URL is cached
-  // locally so the admin can verify that the upload actually happened.
-  const stamp=Date.now();
-  const uniqueId=`storex-backups/${String(key).replace(/[^A-Za-z0-9._-]/g,'_')}-${stamp}-${Math.random().toString(36).slice(2,8)}`;
-  const blob=new Blob([JSON.stringify({schema:4,key,reason,updatedAt:new Date().toISOString(),updatedMs:stamp,data:val})],{type:'application/json'});
-  const fd=new FormData();
-  fd.append('file',blob,`${uniqueId.split('/').pop()}.json`);
-  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
-  fd.append('public_id',uniqueId);
-  const res=await cloudinaryFetchWithTimeout(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd},20000);
-  let data={}; try{data=await res.json();}catch(_){}
-  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || `Cloudinary backup HTTP ${res.status}`);
-  localWrite('storex-last-cloudinary-backup',{key,reason,secure_url:data.secure_url,public_id:data.public_id,at:new Date().toISOString()});
-  CLOUDINARY_LAST_BACKUP=stamp;
-  return data;
-}
-
-async function cloudinaryBackupSnapshot(reason='change'){
-  if(CLOUDINARY_BACKUP_BUSY)return false;
-  const snapshot={};
-  for(const key of cloudinaryStateKeys()){
-    const raw=localStorage.getItem(key);
-    if(raw!==null)snapshot[key]=JSON.parse(raw);
-  }
-  const fingerprint=JSON.stringify(snapshot);
-  if(!fingerprint || fingerprint===CLOUDINARY_LAST_BACKUP_FINGERPRINT)return false;
-  CLOUDINARY_BACKUP_BUSY=true;
-  try{
-    await cloudinaryUnsignedBackup('storex-full-state',snapshot,reason);
-    CLOUDINARY_LAST_BACKUP_FINGERPRINT=fingerprint;
-    toast('Cloudinary backup uploaded ✓');
-    return true;
-  }catch(e){
-    console.warn('Cloudinary backup failed:',e.message||e);
-    toast('Cloudinary backup failed: '+(e.message||'check storex_preset RAW upload')); 
-    return false;
-  }finally{CLOUDINARY_BACKUP_BUSY=false;}
-}
-
-async function cloudinaryUploadJson(key,val){
-  // Secure mode: the browser sends state to your serverless endpoint. The
-  // Cloudinary API secret never belongs in this HTML file.
-  if(CLOUDINARY_SYNC_ENDPOINT){
-    const payload={schema:3,key,updatedAt:new Date().toISOString(),updatedMs:Date.now(),data:val};
-    let lastError=null;
-    for(let attempt=1;attempt<=3;attempt++){
-      try{
-        const res=await cloudinaryFetchWithTimeout(CLOUDINARY_SYNC_ENDPOINT,{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Accept':'application/json'},
-          body:JSON.stringify(payload)
-        },20000);
-        let data={}; try{data=await res.json();}catch(_){}
-        if(res.ok && (data.ok===true || data.secure_url || data.result)) return data;
-        lastError=new Error(data?.error || data?.message || `Sync endpoint failed (HTTP ${res.status})`);
-      }catch(e){ lastError=e; }
-      if(attempt<3) await new Promise(r=>setTimeout(r,700*attempt));
-    }
-    throw lastError || new Error('Secure Cloudinary sync failed');
-  }
-
-  // Do NOT attempt an unsigned overwrite. Cloudinary explicitly treats
-  // overwrite=false for unsigned REST uploads, even if the request contains
-  // overwrite=true. Doing so only creates the misleading failure seen in the
-  // original Store.X file.
-  throw new Error('Cloudinary sync endpoint is not configured. Direct unsigned RAW overwrite is not supported.');
-}
-async function loadFromCloudinary(key){
-  try{
-    const res=await cloudinaryFetchWithTimeout(cloudinaryStatePublicUrl(key,true),{
-      method:'GET',headers:{'Accept':'application/json'}
-    },12000);
-    if(!res.ok)return null;
-    const payload=await res.json();
-    // New files are wrapped with metadata; accept the old plain-JSON format too.
-    if(payload && payload.schema===3 && Object.prototype.hasOwnProperty.call(payload,'data')) return payload.data;
-    return payload;
-  }catch(e){
-    console.warn('Cloudinary state read skipped:',key,e.message||e);
-    return null;
-  }
-}
-
-async function saveToCloudinary(key,val){
-  const data=await cloudinaryUploadJson(key,val);
-  CLOUDINARY_LAST_SYNC=Date.now();
-  return !!data.secure_url;
-}
-
-function cloudinaryStateKeys(){
-  return [KEYS.settings,KEYS.products,KEYS.categories,KEYS.flashsales,KEYS.banners,KEYS.media,KEYS.pages];
-}
-
-// Serialize writes. A snapshot is captured at the moment Save is pressed, so
-// rapid edits cannot accidentally upload a mutable object later.
-function queueCloudinarySave(key,val){
-  const snapshot=JSON.parse(JSON.stringify(val));
-  const job=CLOUDINARY_SYNC_QUEUE.catch(()=>{}).then(()=>saveToCloudinary(key,snapshot));
-  CLOUDINARY_SYNC_QUEUE=job.catch(e=>{
-    console.warn('Queued Cloudinary sync failed:',e.message||e);
-    throw e;
+function buildDemoConfig(){
+  const media=[
+    {id:'media-logo',name:'Demo logo',dataUrl:'https://placehold.co/300x80/1F2328/FFFFFF?text=STORE.X'},
+    {id:'media-hero',name:'Hero demo',dataUrl:'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=78'},
+    {id:'media-cat-1',name:'Mobiles',dataUrl:'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-cat-2',name:'Fashion',dataUrl:'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-cat-3',name:'Beauty',dataUrl:'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-cat-4',name:'Home',dataUrl:'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-cat-5',name:'Electronics',dataUrl:'https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-cat-6',name:'Accessories',dataUrl:'https://images.unsplash.com/photo-1523779917675-b6ed3a42a561?auto=format&fit=crop&w=700&q=72'},
+    {id:'media-phone',name:'Demo phone',dataUrl:'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-earbuds',name:'Demo earbuds',dataUrl:'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-watch',name:'Demo watch',dataUrl:'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-bag',name:'Demo bag',dataUrl:'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-skincare',name:'Demo skincare',dataUrl:'https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-lamp',name:'Demo lamp',dataUrl:'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=900&q=72'},
+    {id:'media-flash',name:'Flash sale',dataUrl:'https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=1200&q=75'},
+    {id:'media-banner',name:'Promo banner',dataUrl:'https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=1400&q=75'}
+  ];
+  const product=(id,title,desc,price,oldPrice,discount,cat,img,flags={})=>({
+    id,title,shortTitle:title,shortDesc:desc,fullDesc:desc+'. Demo listing — replace this with your real product details.',
+    images:[img],mainImage:img,darazUrl:'https://www.daraz.pk/',category:cat,tags:title.toLowerCase().split(' ').concat(['demo','deal']),
+    price,oldPrice,discount,badge:discount?'-'+discount+'%':'',sku:'DEMO-'+id,status:'published',featured:!!flags.featured,trending:!!flags.trending,
+    newArrival:!!flags.newArrival,bestSeller:!!flags.bestSeller,order:flags.order||1,
+    seo:{slug:slugify(title),title:title+' | Store.X',description:desc,keywords:title.toLowerCase()},clicks:0,views:0
   });
-  return job;
-}
-
-async function loadKey(key,fallback){
-  // Cloudinary first: this prevents another browser's newer state from being
-  // hidden by stale localStorage. Only use the local cache when Cloudinary is
-  // unreachable or the shared object does not exist yet.
-  const remote=await loadFromCloudinary(key);
-  if(remote!==null){ localWrite(key,remote); return remote; }
-  return localRead(key,fallback);
-}
-
-async function saveKey(key,val){
-  localWrite(key,val);
-  applyTheme();
-  render();
-  // Always create a real Cloudinary backup. If a signed endpoint is configured,
-  // also update the canonical shared state so every user sees the change.
-  try{
-    const remoteOk=await queueCloudinarySave(key,val);
-    if(remoteOk){toast('Saved to Cloudinary ✓');}
-    else{await cloudinaryBackupSnapshot('admin-save');}
-    return true;
-  }catch(e){
-    // Never leave the admin change only in localStorage when unsigned backup is
-    // available. A unique RAW snapshot does not require overwrite permission.
-    await cloudinaryBackupSnapshot('admin-save-fallback');
-    return false;
-  }
-}
-
-async function refreshStateFromCloudinary(forceRender=false){
-  if(CLOUDINARY_SYNC_BUSY)return;
-  CLOUDINARY_SYNC_BUSY=true;
-  try{
-    const keys=cloudinaryStateKeys();
-    let changed=false;
-    for(const key of keys){
-      const remote=await loadFromCloudinary(key);
-      if(remote!==null){
-        const local=localStorage.getItem(key);
-        if(JSON.stringify(remote)!==local){
-          localWrite(key,remote);
-          changed=true;
-        }
-      }
-    }
-    if(changed||forceRender){
-      SETTINGS=await loadKey(KEYS.settings,DEFAULT_SETTINGS);
-      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{
-        hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
-        footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{}, {
-          social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})
-        }),
-        search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
-        mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
-      });
-      PRODUCTS=await loadKey(KEYS.products,[]);
-      CATEGORIES=await loadKey(KEYS.categories,seedCategories());
-      FLASHSALES=await loadKey(KEYS.flashsales,[]);
-      BANNERS=await loadKey(KEYS.banners,[]);
-      MEDIA=await loadKey(KEYS.media,[]);
-      PAGES=await loadKey(KEYS.pages,seedPages());
-      applyTheme();
-      render();
-    }
-  }finally{ CLOUDINARY_SYNC_BUSY=false; }
-}
-
-async function syncFromCloudinary(forceRender=false){ return refreshStateFromCloudinary(forceRender); }
-
-function startCloudinarySync(){
-  if(CLOUDINARY_SYNC_TIMER)clearInterval(CLOUDINARY_SYNC_TIMER);
-  CLOUDINARY_SYNC_TIMER=setInterval(()=>refreshStateFromCloudinary(false),CLOUDINARY_SYNC_INTERVAL);
-  document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'){
-      refreshStateFromCloudinary(false);
-      cloudinaryBackupSnapshot('tab-visible');
-    }
+  const products=[
+    product('p-phone','Nova X Pro Smartphone','6.7-inch display • 256GB • fast charging',74999,89999,17,'cat-mobiles','media-phone',{featured:true,trending:true,bestSeller:true,order:1}),
+    product('p-earbuds','AirBeat Pro Earbuds','Wireless earbuds with charging case',5499,7999,31,'cat-electronics','media-earbuds',{featured:true,trending:true,order:2}),
+    product('p-watch','Pulse Smartwatch','AMOLED display • fitness tracking • notifications',8999,11999,25,'cat-accessories','media-watch',{trending:true,newArrival:true,order:3}),
+    product('p-bag','Urban Travel Backpack','Water-resistant everyday backpack',3999,5499,27,'cat-fashion','media-bag',{newArrival:true,bestSeller:true,order:4}),
+    product('p-skincare','Glow Care Skincare Set','Daily skincare essentials set',2999,3999,25,'cat-beauty','media-skincare',{trending:true,order:5}),
+    product('p-lamp','Smart Desk Lamp','Adjustable LED desk lamp with touch control',2799,3499,20,'cat-home','media-lamp',{newArrival:true,order:6})
+  ];
+  const flash={
+    id:'flash-demo',title:'Weekend Flash Sale',slug:'weekend-flash-sale',subtitle:'Limited-time prices on trending picks.',description:'Demo flash sale for Store.X.',
+    status:'active',start:new Date(Date.now()-3600000).toISOString(),end:new Date(Date.now()+2*86400000).toISOString(),
+    banner:'media-flash',banner2:null,banner3:null,products:products.slice(0,4).map(x=>({type:'existing',productId:x.id})),
+    display:{height:360,infoBg:'#1F2328',textColor:'#FFFFFF',accentColor:'#F57224',imageFit:'cover'},seo:{title:'Weekend Flash Sale | Store.X',keywords:'flash sale,deals',description:'Limited-time Store.X deals.'}
+  };
+  const banner={id:'banner-demo',image:'media-banner',desktopImage:'media-banner',mobileImage:'media-banner',heroSlider:true,heading:'Free Delivery on Demo Deals',description:'Explore featured products and update every detail from the Admin Panel.',buttonText:'Shop Now',buttonUrl:'#/category/all',visible:true,display:{height:260,radius:12,overlay:.28,padding:30,headingColor:'#FFFFFF',descriptionColor:'#FFFFFF',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',buttonWidth:'',imageFit:'cover'}};
+  const settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  Object.assign(settings,{
+    siteName:'Store.X Demo',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
+    favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',adminPass:'storex-admin',
+    hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from this HTML file.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from this HTML file.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
+    footer:{about:'Store.X is a demo product discovery storefront. Replace the demo content with your own.',copyright:'© Store.X — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
+    search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
+    nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},{id:'nav-contact',label:'Contact',url:'#/page/contact'},{id:'nav-privacy',label:'Privacy Policy',url:'#/page/privacy-policy'},{id:'nav-terms',label:'Terms',url:'#/page/terms'}],
+    darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
+    sections:[
+      {id:'sec-hero',type:'hero',visible:true,title:'Hero'},
+      {id:'sec-cats',type:'categories',visible:true,title:'Shop by Category',subtitle:'Browse popular departments'},
+      {id:'sec-products',type:'productCollection',visible:true,title:'Featured Deals',subtitle:'Hand-picked demo products',config:{filter:'featured',count:6,layout:'grid',columns:3,productId:''}},
+      {id:'sec-flash',type:'flashsale',visible:true,title:'Flash Sale',subtitle:'Limited-time demo offers',config:{flashSaleId:'flash-demo'}},
+      {id:'sec-banner',type:'banner',visible:true,title:'Promo Banner',subtitle:'',config:{bannerId:'banner-demo'}},
+      {id:'sec-daraz',type:'darazPromo',visible:true,title:'Daraz Store Strip',subtitle:''},
+      {id:'sec-trending',type:'productCollection',visible:true,title:'Trending Now',subtitle:'Popular demo picks',config:{filter:'trending',count:6,layout:'grid',columns:3,productId:''}}
+    ]
   });
-  window.addEventListener('focus',()=>{
-    refreshStateFromCloudinary(false);
-    cloudinaryBackupSnapshot('window-focus');
-  });
-  // Requested safety behavior: scrolling periodically creates a real Cloudinary
-  // RAW snapshot when the local state has changed. It is throttled so normal
-  // scrolling does not flood Cloudinary with identical copies.
-  let scrollTimer=null;
-  window.addEventListener('scroll',()=>{
-    if(scrollTimer)return;
-    scrollTimer=setTimeout(()=>{
-      scrollTimer=null;
-      if(Date.now()-CLOUDINARY_LAST_BACKUP>=CLOUDINARY_BACKUP_INTERVAL)
-        cloudinaryBackupSnapshot('scroll');
-    },1200);
-  },{passive:true});
+  return {settings,products,categories:seedCategories(),flashsales:[flash],banners:[banner],media,pages:seedPages()};
 }
-
-function cloudinaryOptimizedUrl(url, width){
-  if(!url || typeof url!=='string') return url||'';
-  if(!url.includes('res.cloudinary.com/')) return url;
-  const marker='/image/upload/';
-  if(!url.includes(marker)) return url;
-  if(url.includes('/f_auto,') || url.includes('/q_auto')) return url;
-  const transform=width ? `f_auto,q_auto:good,dpr_auto,w_${Math.round(width)},c_limit` : CLOUDINARY_TRANSFORM;
-  return url.replace(marker, `${marker}${transform}/`);
-}
-
-function isCloudinaryUrl(url){
-  return typeof url==='string' && url.includes('res.cloudinary.com/'+CLOUDINARY_CLOUD_NAME+'/');
-}
-async function cloudinaryUploadFile(file){
-  const fd=new FormData();
-  fd.append('file',file);
-  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
-  const res=await fetch(CLOUDINARY_IMAGE_UPLOAD_URL,{method:'POST',body:fd});
-  let data={}; try{data=await res.json();}catch(_){ }
-  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || ('Cloudinary HTTP '+res.status));
-  return cloudinaryOptimizedUrl(data.secure_url);
-}
-async function uploadImageUrlToCloudinary(rawUrl, label='Image'){
-  const url=(rawUrl||'').trim();
-  if(!url) throw new Error('Please enter an image URL');
-  if(!isValidHttpUrl(url)) throw new Error('Please enter a valid http(s) image URL');
-  if(isCloudinaryUrl(url)) return cloudinaryOptimizedUrl(url);
-  // First let Cloudinary fetch the public URL directly (works with IMGBB and other public image URLs).
-  try{ return await cloudinaryUploadFile(url); }
-  catch(e){ console.warn('Cloudinary remote URL upload failed:',e); }
-  // Browser/CORS fallback: download the image and send the Blob to Cloudinary.
-  try{
-    const sourceRes=await fetch(url,{mode:'cors',cache:'no-store'});
-    if(!sourceRes.ok) throw new Error('Source image HTTP '+sourceRes.status);
-    const blob=await sourceRes.blob();
-    if(!blob.type || !blob.type.startsWith('image/')) throw new Error('The URL did not return an image');
-    return await cloudinaryUploadFile(blob);
-  }catch(e){
-    // Important: never break the storefront just because Cloudinary cannot import an external URL.
-    // Keep the original public URL so the storefront can still use it if Cloudinary cannot import it.
-    console.warn(label+' kept as original public URL:',e);
-    return url;
-  }
-}
-
-async function rememberMediaUrl(url){
-  if(!url)return;
-  if(!MEDIA.some(m=>m.dataUrl===url || m.name===url)){
-    MEDIA.push({id:uid(),name:url,dataUrl:url});
-    saveKey(KEYS.media,MEDIA);
-  }
-}
-async function handleCloudinaryFileInput(input,callback){
-  const file=input.files&&input.files[0]; if(!file)return;
-  input.disabled=true;
-  try{const stored=await cloudinaryUploadFile(file);await rememberMediaUrl(stored);callback(stored);toast('File uploaded to Cloudinary, saved to Media Library and optimized.');}
-  catch(e){toast('Cloudinary upload failed: '+e.message);}
-  finally{input.disabled=false;}
-}
-async function handleImageUrlInput(input, callback){
-  const url=(input.value||'').trim(); if(!url) return;
-  const old=input.value; input.disabled=true; input.dataset.originalPlaceholder=input.placeholder; input.placeholder='Connecting image...';
-  try{
-    const stored=await uploadImageUrlToCloudinary(url);
-    await rememberMediaUrl(stored);
-    callback(stored);
-    toast(isCloudinaryUrl(stored)?'Image uploaded to Cloudinary, saved to Media Library and applied.':'Image URL saved and added to Media Library.');
-  }catch(e){ toast('Image upload failed: '+e.message); input.value=old; }
-  finally{ input.disabled=false; input.placeholder=input.dataset.originalPlaceholder||'Image URL'; }
-}
-
-async function processImageField(input,getTarget,prop,previewId){
-  const url=(input.value||'').trim(); if(!url) return;
-  const old=url; input.disabled=true; input.dataset.originalPlaceholder=input.placeholder; input.placeholder='Connecting image...';
-  try{
-    const storedUrl=await uploadImageUrlToCloudinary(url,prop);
-    const target=getTarget(); if(!target) throw new Error('Image target is no longer available');
-    target[prop]=storedUrl;
-    const prev=document.getElementById(previewId); if(prev){prev.src=storedUrl;prev.style.display='block';}
-    toast(isCloudinaryUrl(storedUrl)?'Image uploaded to Cloudinary and saved.':'Image URL saved.');
-  }catch(e){input.value=old;toast('Image upload failed: '+e.message);}
-  finally{input.disabled=false;input.placeholder=input.dataset.originalPlaceholder||'Image URL';}
-}
-
 async function boot(){
-  
-  SETTINGS = await loadKey(KEYS.settings, DEFAULT_SETTINGS);
+  // DEMO_CONFIG is regenerated from the editable source builder for a clean
+  // deterministic offline start. No old localStorage state is trusted.
+  const demo=buildDemoConfig();
+
+  SETTINGS = await loadKey(KEYS.settings, demo.settings);
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, SETTINGS, {
     hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
-    footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),
+    footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{
+      social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})
+    }),
     search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
+    darazPromo:Object.assign({},DEFAULT_SETTINGS.darazPromo,SETTINGS.darazPromo||{}),
     mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
   });
-  PRODUCTS = await loadKey(KEYS.products, []);
-  CATEGORIES = await loadKey(KEYS.categories, seedCategories());
-  FLASHSALES = await loadKey(KEYS.flashsales, []);
-  BANNERS = await loadKey(KEYS.banners, []);
-  MEDIA = await loadKey(KEYS.media, []);
-  PAGES = await loadKey(KEYS.pages, seedPages());
+  PRODUCTS = await loadKey(KEYS.products, demo.products);
+  CATEGORIES = await loadKey(KEYS.categories, demo.categories);
+  FLASHSALES = await loadKey(KEYS.flashsales, demo.flashsales);
+  BANNERS = await loadKey(KEYS.banners, demo.banners);
+  MEDIA = await loadKey(KEYS.media, demo.media);
+  PAGES = await loadKey(KEYS.pages, demo.pages);
   applyTheme();
   injectGA();
   window.addEventListener('hashchange', render);
   render();
   applyMediaSizing();
-  startCloudinarySync();
-  setTimeout(()=>syncFromCloudinary(false),350);
 }
 
-function seedCategories(){ return []; }
-function seedPages(){
-  return [
-    {id:uid(),title:'About Us',slug:'about',content:'Tell your customers about Store.X here. Edit this from the admin panel.',status:'published'},
-    {id:uid(),title:'Privacy Policy',slug:'privacy-policy',content:'Your privacy policy content goes here.',status:'published'},
-    {id:uid(),title:'Terms & Conditions',slug:'terms',content:'Your terms and conditions go here.',status:'published'},
-    {id:uid(),title:'Disclaimer',slug:'disclaimer',content:'Store.X is a product discovery site. All purchases are completed on Daraz; Store.X is not the seller of record.',status:'published'}
-  ];
+function loadKey(key,fallback){
+  // HTML-source mode is authoritative. Never read old localStorage data because
+  // stale data from an earlier Store.X build can be missing required fields and
+  // cause a blank storefront. A deep clone also prevents accidental mutation of
+  // the demo source configuration.
+  if(!LOCAL_ADMIN_PERSISTENCE) return Promise.resolve(JSON.parse(JSON.stringify(fallback)));
+  return Promise.resolve(localRead(key,fallback));
+}
+async function saveKey(key,val){
+  if(LOCAL_ADMIN_PERSISTENCE) localWrite(key,val);
+  applyTheme();
+  render();
+  return true;
 }
 
 function applyTheme(){
@@ -791,8 +611,6 @@ function injectGA(){
   document.head.appendChild(s1); document.head.appendChild(s2);
 }
 
-function mediaSrc(id){ if(!id) return ''; const m=MEDIA.find(x=>x.id===id); const src=m?m.dataUrl:(typeof id==='string'&&(id.startsWith('data:')||id.startsWith('http'))?id:''); return cloudinaryOptimizedUrl(src); }
-
 /* ---------- SEO (hidden meta tags, invisible to shoppers) ---------- */
 function setMetaTag(name, content){
   let el = document.querySelector(`meta[name="${name}"]`);
@@ -807,9 +625,6 @@ function applySEO(seo, fallbackTitle, fallbackDesc){
 }
 function resetDefaultSEO(){ applySEO(null, ''); }
 
-function cloudinaryStatusMessage(ok){
-  return ok ? 'Cloudinary: synced' : 'Cloudinary: sync failed';
-}
 
 function toast(msg){
   const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
@@ -889,20 +704,64 @@ function letterSuggestions(){
 }
 function trendingSearches(){return (SETTINGS.search?.trending||DEFAULT_SETTINGS.search.trending||[]).filter(Boolean).slice(0,12);}
 function openSearchSuggestions(input){
-  const box=input.closest('.search-wrap')?.querySelector('.search-suggestions'); if(!box)return;
-  const q=input.value||'', suggestions=searchSuggestions(q), trends=trendingSearches();
-  if(!q.trim()) box.innerHTML='<div class="search-suggestions-head">Trending searches</div>'+trends.map(v=>`<button type="button" class="search-suggestion" onclick="useSearchSuggestion(${JSON.stringify(v)})"><span>↗ ${esc(v)}</span><small>Trending</small></button>`).join('');
-  else box.innerHTML=suggestions.length?'<div class="search-suggestions-head">Suggestions</div>'+suggestions.map(v=>`<button type="button" class="search-suggestion" onclick="useSearchSuggestion(${JSON.stringify(v)})"><span>${esc(v)}</span><small>Product</small></button>`).join(''):'<div class="search-suggestions-head">Suggestions</div><div style="padding:12px;color:var(--ink-soft);font-size:12px;">No exact suggestion — press Search to search all products.</div>';
+  const wrap=input.closest('.search-wrap');
+  const box=wrap?.querySelector('.search-suggestions');
+  if(!box) return;
+  const q=String(input.value||'').trim();
+  const suggestions=searchSuggestions(q);
+  const trends=trendingSearches();
+  const values=q ? suggestions : trends;
+  if(!values.length){
+    box.innerHTML='<div class="search-suggestions-head">Suggestions</div><div style="padding:12px;color:var(--ink-soft);font-size:12px;">No suggestions yet — keep typing or press Search.</div>';
+  }else{
+    box.innerHTML='<div class="search-suggestions-head">'+(q?'Suggestions':'Trending searches')+'</div>'+values.map(v=>`<button type="button" class="search-suggestion" data-search-value="${esc(v)}" aria-label="Search ${esc(v)}"><span>${q?'':'↗ '}${esc(v)}</span><small>${q?'Search':'Trending'}</small></button>`).join('');
+  }
   box.classList.add('open');
 }
-function useSearchSuggestion(v){const input=document.querySelector('.search-form input[name="q"]');if(input)input.value=v;if(v)location.hash='/search?q='+encodeURIComponent(v);}
+
+function performSearchQuery(v){
+  const query=String(v||'').trim();
+  if(!query) return false;
+  // Always put the selected keyword into the visible search box first.
+  document.querySelectorAll('.search-form input[name="q"]').forEach(input=>{ input.value=query; });
+  document.querySelectorAll('.search-suggestions').forEach(box=>box.classList.remove('open'));
+  // Keep the search field open on mobile after selecting a suggestion.
+  MOBILE_SEARCH_OPEN=true;
+  const target='/search?q='+encodeURIComponent(query);
+  if(location.hash==='#'+target){
+    render();
+  }else{
+    location.hash=target;
+  }
+  return false;
+}
+function useSearchSuggestion(v){
+  return performSearchQuery(v);
+}
+
+// Reliable mouse/touch/pointer handling for suggestion buttons.
+// This is deliberately delegated from document so it continues working after render()
+// replaces the header/search DOM.
+document.addEventListener('pointerdown',function(e){
+  const item=e.target.closest?.('.search-suggestion[data-search-value]');
+  if(!item) return;
+  e.preventDefault();
+  e.stopPropagation();
+  performSearchQuery(item.getAttribute('data-search-value')||'');
+},{passive:false});
+document.addEventListener('click',function(e){
+  const item=e.target.closest?.('.search-suggestion[data-search-value]');
+  if(!item) return;
+  e.preventDefault();
+  e.stopPropagation();
+},{passive:false});
 function renderHeader(){
   const logo = SETTINGS.logo ? `<img src="${mediaSrc(SETTINGS.logo)}" alt="${esc(SETTINGS.siteName)} logo" style="width:${SETTINGS.logoWidth}px;height:auto;max-height:56px;">` : `<span class="logo-fallback">${esc(SETTINGS.siteName)}</span>`;
-  const navLinks = SETTINGS.nav.map(n=>`<a href="${esc(n.url)}" ${n.newTab?'target="_blank" rel="noopener"':''}>${esc(n.label)}</a>`).join('');
+  const navLinks = SETTINGS.nav.slice(0,3).map(n=>`<a href="${esc(n.url)}" ${n.newTab?'target="_blank" rel="noopener"':''}>${esc(n.label)}</a>`).join('');
   return `<header id="site-header"><div class="container header-row">
     <div class="logo-wrap"><a href="${esc(SETTINGS.logoLink||'#/')}">${logo}</a></div>
     <button class="mobile-toggle" onclick="MOBILE_DRAWER_OPEN=true;render();" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-    <div class="search-wrap"><form class="search-form ${MOBILE_SEARCH_OPEN?'mobile-open':''}" onsubmit="event.preventDefault();const v=this.q.value.trim();if(v)location.hash='/search?q='+encodeURIComponent(v);" autocomplete="off">
+    <div class="search-wrap"><form class="search-form ${MOBILE_SEARCH_OPEN?'mobile-open':''}" onsubmit="event.preventDefault();performSearchQuery(this.q.value);" autocomplete="off">
       <input name="q" type="search" placeholder="Search products..." aria-label="Search products" onfocus="openSearchSuggestions(this)" oninput="openSearchSuggestions(this)">
       <button type="submit" aria-label="Search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
       <div class="search-suggestions" onclick="event.stopPropagation()"></div></form></div>
@@ -912,7 +771,18 @@ function renderHeader(){
 }
 function renderMobileDrawer(){
   if(!MOBILE_DRAWER_OPEN) return '';
-  const navLinks = SETTINGS.nav.map(n=>`<a href="${esc(n.url)}" onclick="MOBILE_DRAWER_OPEN=false;">${esc(n.label)}</a>`).join('');
+  const configured=Array.isArray(SETTINGS.nav)?SETTINGS.nav.filter(n=>String(n.label||'').toLowerCase()!=='about'):[];
+  const built=[
+    {label:'Home',url:'#/'},
+    {label:'All Products',url:'#/category/all'},
+    {label:'Flash Sale',url:'#/flash-sale'},
+    ...CATEGORIES.filter(c=>c.status!=='hidden').slice(0,12).map(c=>({label:c.name,url:'#/category/'+c.slug})),
+    ...PAGES.filter(p=>p.status==='published' && p.slug!=='about').slice(0,12).map(p=>({label:p.title,url:'#/page/'+p.slug}))
+  ];
+  const merged=[...configured,...built].filter(x=>x&&x.label&&x.url);
+  const seen=new Set();
+  const navLinks=merged.filter(n=>{const k=String(n.url)+'|'+String(n.label);if(seen.has(k))return false;seen.add(k);return true;})
+    .map(n=>`<a href="${esc(n.url)}" ${n.newTab?'target="_blank" rel="noopener"':''} onclick="MOBILE_DRAWER_OPEN=false;">${esc(n.label)}</a>`).join('');
   return `<div class="mobile-drawer open" onclick="if(event.target===this){MOBILE_DRAWER_OPEN=false;render();}">
     <div class="mobile-drawer-panel">
       <button class="mobile-drawer-close" onclick="MOBILE_DRAWER_OPEN=false;render();">&times;</button>
@@ -924,7 +794,11 @@ function renderMobileDrawer(){
 
 function renderFooter(){
   const s = SETTINGS.footer;
-  const cats = CATEGORIES.slice(0,6).map(c=>`<a href="#/category/${esc(c.slug)}">${esc(c.name)}</a>`).join('') || '<span style="color:#71757B;font-size:13px;">No categories yet</span>';
+  const topCats = [...CATEGORIES].filter(c=>c.status!=='hidden').sort((a,b)=>{
+    const score=c=>{ const items=PRODUCTS.filter(p=>p.status==='published'&&p.category===c.id); return items.reduce((n,p)=>n+(p.bestSeller?100:0)+(p.trending?50:0)+(p.clicks||0)+(p.views||0),0); };
+    return score(b)-score(a) || (a.order||0)-(b.order||0);
+  }).slice(0,5);
+  const cats = topCats.map(c=>`<a href="#/category/${esc(c.slug)}">${esc(c.name)}</a>`).join('') || '<span style="color:#71757B;font-size:13px;">No categories yet</span>';
   const pageLinks = PAGES.filter(p=>p.status==='published').map(p=>`<a href="#/page/${esc(p.slug)}">${esc(p.title)}</a>`).join('');
   const soc = s.social;
   const socialIcons = {facebook:'f',instagram:'\u25CE',tiktok:'\u266A',youtube:'\u25B6',whatsapp:'\u260E',twitter:'X'};
@@ -964,6 +838,7 @@ function renderSection(sec){
     case 'productCollection': return renderCollectionSection(sec);
     case 'categoryShowcase': return renderCategoryShowcaseSection(sec);
     case 'banner': return renderBannerSection(sec);
+    case 'darazPromo': return renderDarazPromoSection();
     case 'customHtml': return `<section class="section container">${sec.config&&sec.config.html||''}</section>`;
     default: return '';
   }
@@ -1010,7 +885,7 @@ function renderHero(){
   </section>`;
 }
 
-let HERO_SLIDER_TIMER = null;
+
 function initHeroSlider(){
   if(HERO_SLIDER_TIMER){ clearInterval(HERO_SLIDER_TIMER); HERO_SLIDER_TIMER=null; }
   const wrap = document.querySelector('.hero-bg');
@@ -1093,7 +968,7 @@ function renderFlashSaleSection(sec){
   </section>`;
 }
 
-let FLASH_CAROUSEL_TIMERS = [];
+
 function initFlashCarousels(){
   FLASH_CAROUSEL_TIMERS.forEach(t=>clearInterval(t));
   FLASH_CAROUSEL_TIMERS = [];
@@ -1121,7 +996,7 @@ function renderCategoriesSection(sec){
   }
   const cats = CATEGORIES.filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0)).map(c=>`
     <a class="cat-card" href="#/category/${esc(c.slug)}">
-      <div class="cat-icon">${c.image? `<img src="${mediaSrc(c.image)}" alt="">` : (c.icon||'\u{1F6CD}')}</div>
+      <div class="cat-icon">${c.image? `<img src="${mediaSrc(c.image)}" alt="" loading="lazy" decoding="async">` : (c.icon||'\u{1F6CD}')}</div>
       <div class="cat-name">${esc(c.name)}</div>
     </a>`).join('');
   return `<section class="section container"><div class="section-head"><div><h2>${esc(sec.title||'Shop by Category')}</h2><p>${esc(sec.subtitle||'')}</p></div></div>
@@ -1148,7 +1023,7 @@ function renderCollectionSection(sec){
     const img = p.mainImage ? mediaSrc(p.mainImage) : (p.images&&p.images[0]?mediaSrc(p.images[0]):'');
     return `<section class="section container"><div class="section-head"><div><h2>${esc(sec.title)}</h2><p>${esc(sec.subtitle||'')}</p></div></div>
     <div class="spotlight-card">
-      <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="spotlight-img">${img?`<img src="${img}" alt="${esc(p.title)}">`:''}</a>
+      <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="spotlight-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>
       <div class="spotlight-body">
         ${p.badge?`<span class="card-badge" style="position:static;display:inline-block;width:fit-content;">${esc(p.badge)}</span>`:''}
         <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}"><h3>${esc(p.shortTitle||p.title)}</h3></a>
@@ -1209,12 +1084,19 @@ function renderBannerSection(sec){
       ${b.buttonText?`<span class="btn small" style="background:${esc(d.buttonBg||'#F57224')};color:${esc(d.buttonColor||'#fff')};border:1.5px solid ${esc(d.buttonBorder||d.buttonBg||'#F57224')};${d.buttonWidth?`width:${Number(d.buttonWidth)}px;justify-content:center;`:''}">${safeRichHtml(b.buttonText)}</span>`:''}
     </div></a></section>`;
 }
+function renderDarazPromoSection(){
+  const d=Object.assign({enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},SETTINGS.darazPromo||{});
+  if(!d.enabled) return '';
+  const img=mediaSrc(d.image);
+  return `<section class="section container" style="padding-top:18px;padding-bottom:18px;"><div class="daraz-promo" style="min-height:${Math.max(64,Number(d.height)||96)}px;border-radius:${Math.max(0,Number(d.radius)||10)}px;background:${esc(d.background)};color:${esc(d.textColor)};padding:${Math.max(8,Number(d.padding)||16)}px;">${img?`<div class="daraz-promo-image"><img src="${img}" alt="" loading="lazy" decoding="async"></div>`:''}<div class="daraz-promo-copy"><strong>${safeRichHtml(d.title)}</strong>${d.description?`<span>${safeRichHtml(d.description)}</span>`:''}</div>${d.buttonText?`<a class="btn small" href="${esc(d.buttonUrl||'#')}" target="_blank" rel="noopener" style="background:${esc(d.buttonBg)};color:${esc(d.buttonColor)};border:1px solid ${esc(d.buttonBorder)};">${safeRichHtml(d.buttonText)}</a>`:''}</div></section>`;
+}
+
 /* ================= PRODUCT CARD ================= */
 function renderProductCard(p){
   const img = p.mainImage ? mediaSrc(p.mainImage) : (p.images&&p.images[0]?mediaSrc(p.images[0]):'');
   return `<div class="card">
     ${p.badge?`<span class="card-badge">${esc(p.badge)}</span>`:''}
-    <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${img}" alt="${esc(p.title)}">`:''}</a>
+    <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>
     <div class="card-body">
       <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-title">${esc(p.shortTitle||p.title)}</a>
       ${p.shortDesc?`<div class="card-desc">${esc(p.shortDesc)}</div>`:''}
@@ -1237,7 +1119,10 @@ function buyOnDaraz(productId, customUrl){
 function renderProductPage(key){
   const p = PRODUCTS.find(x=> (x.seo&&x.seo.slug)===key || x.id===key);
   if(!p || p.status!=='published') return renderNotFound('Product not found', 'This product may have been removed or is no longer available.');
-  p.views = (p.views||0)+1; saveKey(KEYS.products, PRODUCTS);
+  // View counters are session-only here. Do not call saveKey() while rendering
+  // a product page: saveKey() itself renders, which previously caused recursive
+  // re-renders and made product navigation feel slow/unresponsive.
+  p.views = (p.views||0)+1;
   const images = (p.images&&p.images.length? p.images : (p.mainImage?[p.mainImage]:[]));
   const main = images[PD_ACTIVE_IMG] || images[0];
   const cat = CATEGORIES.find(c=>c.id===p.category);
@@ -1379,7 +1264,29 @@ function startCountdowns(){
   tick(); COUNTDOWN_TIMER = setInterval(tick,1000);
 }
 
-function wireStorefrontEvents(){}
+function wireStorefrontEvents(){
+  // Event delegation keeps storefront controls working after every hash-route render.
+  // Most controls use inline handlers, but delegation covers links/forms that are
+  // dynamically replaced and makes local-file Chrome usage more reliable.
+  const app=document.getElementById('app');
+  if(!app || app.dataset.storexWired==='1') return;
+  app.dataset.storexWired='1';
+  app.addEventListener('click',e=>{
+    const a=e.target.closest('a[href^="#/"]');
+    if(a){
+      const href=a.getAttribute('href');
+      if(href){ e.preventDefault(); location.hash=href.slice(1)||'/'; }
+    }
+  });
+  app.addEventListener('submit',e=>{
+    const form=e.target.closest('.search-form');
+    if(!form) return;
+    e.preventDefault();
+    const input=form.querySelector('input[name="q"]');
+    const q=(input?.value||'').trim();
+    if(q) location.hash='/search?q='+encodeURIComponent(q);
+  });
+}
 
 /* ============================================================
    ADMIN PANEL
@@ -1451,11 +1358,6 @@ function renderAdminView(){
 }
 
 /* ---------- Dashboard ---------- */
-function cloudinarySyncStatus(){
-  const age=CLOUDINARY_LAST_SYNC ? Math.max(0,Math.round((Date.now()-CLOUDINARY_LAST_SYNC)/1000)) : null;
-  return age===null ? 'Cloudinary sync: waiting' : `Cloudinary sync: ${age}s ago`;
-}
-
 function adminDashboard(){
   const published = PRODUCTS.filter(p=>p.status==='published').length;
   const hidden = PRODUCTS.filter(p=>p.status==='hidden').length;
@@ -1494,7 +1396,7 @@ let MEDIA_PICKER_CALLBACK=null;
 function openMediaPicker(callback){
   MEDIA_PICKER_CALLBACK=callback;
   showModal(`<h2>Select image from Media Library</h2>
-    <p style="font-size:12.5px;color:var(--ink-soft);">Choose an existing Cloudinary image. The selected image is immediately applied to the current field.</p>
+    <p style="font-size:12.5px;color:var(--ink-soft);">Choose an existing image from this HTML file. The selected image is immediately applied to the current field.</p>
     ${MEDIA.length?`<div class="thumb-picker" style="gap:12px;">${MEDIA.map(m=>`<button type="button" class="t" style="width:90px;height:90px;padding:0;background:#fff;" onclick="selectMediaForField('${m.id}')"><img src="${mediaSrc(m.id)}" alt=""></button>`).join('')}</div>`:'<div class="empty-state"><div class="icon">🖼️</div><h3>No media yet</h3><p>Upload an image in Media Library first.</p></div>'}
     <div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal();MEDIA_PICKER_CALLBACK=null;">Cancel</button></div>`);
 }
@@ -1508,7 +1410,7 @@ function adminImageControls(label,current,onSelectJs,previewId,extraNote=''){
   return `<div class="upload-box">
     <input type="url" value="${esc(current||'')}" placeholder="Paste image URL..." onchange="if(this.value){const input=this;handleImageUrlInput(input,url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display=url?'block':'none';}});}">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-      <label class="btn small" style="display:inline-flex;align-items:center;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display='block';}})"></label>
+      <label class="btn small" style="display:inline-flex;align-items:center;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display='block';}})"></label>
       <button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{${onSelectJs};const p=document.getElementById('${safePreview}');if(p){p.src=url;p.style.display='block';}})">Choose from Media Library</button>
     </div>
     <img id="${safePreview}" src="${current?mediaSrc(current):''}" style="max-width:180px;max-height:90px;object-fit:contain;border-radius:6px;margin-top:8px;${current?'':'display:none;'}">
@@ -1590,7 +1492,7 @@ function openProductModal(id){
           <label>Product images (from your device)</label>
           <div class="upload-box">
             <input type="url" placeholder="Image URL yahan enter karein (https://...)" onchange="if(this.value){ handleImageUrlInput(this, url=>{ addProductImage('${p.id}', url, ${isNew}); this.value=''; }); }">
-            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>addProductImage('${p.id}',url,${isNew}))"></label>
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>addProductImage('${p.id}',url,${isNew}))"></label>
             <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>addProductImage('${p.id}',url,${isNew}))">Choose from Media Library</button>
             <div id="product-img-list-${p.id}" class="thumb-picker" style="margin-top:10px;">
               ${(p.images||[]).map(im=>`<div class="t ${p.mainImage===im?'sel':''}" onclick="setMainProductImage('${p.id}','${im}',${isNew})"><img src="${mediaSrc(im)}"></div>`).join('')}
@@ -1654,7 +1556,7 @@ function saveProductForm(pid, isNew){
   });
   if(isNew){ PRODUCTS.push(draft); window.__draftProduct=null; }
   saveKey(KEYS.products, PRODUCTS);
-  closeModal(); toast('Product saved and synchronized');
+  closeModal(); toast('Product saved in this session');
 }
 
 /* ---------- Categories ---------- */
@@ -1695,7 +1597,7 @@ function openCategoryModal(id){
           <label>Category image</label>
           <div class="upload-box">
             <input type="url" placeholder="Category Image URL yahan enter karein" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ (${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url; const prev=document.getElementById('cat-img-prev-${c.id}'); if(prev){prev.src=url; prev.style.display='block';} }); }">
-            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{(${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url;document.getElementById('cat-img-prev-${c.id}').src=url;document.getElementById('cat-img-prev-${c.id}').style.display='block';})"></label>
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{(${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url;document.getElementById('cat-img-prev-${c.id}').src=url;document.getElementById('cat-img-prev-${c.id}').style.display='block';})"></label>
             <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{(${isNew}?window.__draftCategory:CATEGORIES.find(x=>x.id==='${c.id}')).image=url;document.getElementById('cat-img-prev-${c.id}').src=url;document.getElementById('cat-img-prev-${c.id}').style.display='block';})">Choose from Media Library</button>
             <img id="cat-img-prev-${c.id}" src="${c.image?mediaSrc(c.image):''}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;margin-top:8px;${c.image?'':'display:none;'}">
             <div class="upload-note">For a perfect fit in the box-style category grid, upload a square image \u2014 recommended 800 x 800px.</div>
@@ -1765,19 +1667,19 @@ function openFlashSaleModal(id){
           <div class="upload-box">
             <label style="display:block;font-size:11.5px;font-weight:700;margin-bottom:4px;">Image 1 (required)</label>
             <input type="url" placeholder="Flash Sale Image URL 1 (required)" value="${esc(f.banner||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner=url||null; const prev=document.getElementById('flash-banner-prev-1'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
-            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner=url;const prev=document.getElementById('flash-banner-prev-1');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner=url;const prev=document.getElementById('flash-banner-prev-1');if(prev){prev.src=url;prev.style.display='block';}})"></label>
             <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner=url;const prev=document.getElementById('flash-banner-prev-1');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-1" src="${f.banner?mediaSrc(f.banner):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner?'':'display:none;'}">
 
             <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 2 (optional)</label>
             <input type="url" placeholder="Flash Sale Image URL 2 (optional)" value="${esc(f.banner2||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner2=url||null; const prev=document.getElementById('flash-banner-prev-2'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
-            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner2=url;const prev=document.getElementById('flash-banner-prev-2');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner2=url;const prev=document.getElementById('flash-banner-prev-2');if(prev){prev.src=url;prev.style.display='block';}})"></label>
             <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner2=url;const prev=document.getElementById('flash-banner-prev-2');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-2" src="${f.banner2?mediaSrc(f.banner2):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner2?'':'display:none;'}">
 
             <label style="display:block;font-size:11.5px;font-weight:700;margin:14px 0 4px;">Image 3 (optional)</label>
             <input type="url" placeholder="Flash Sale Image URL 3 (optional)" value="${esc(f.banner3||'')}" onchange="const url=this.value.trim(); const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}')); d.banner3=url||null; const prev=document.getElementById('flash-banner-prev-3'); if(prev){ if(url){prev.src=url; prev.style.display='block';} else {prev.style.display='none';} }">
-            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner3=url;const prev=document.getElementById('flash-banner-prev-3');if(prev){prev.src=url;prev.style.display='block';}})"></label>
+            <label class="btn small" style="display:inline-flex;margin-top:8px;">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner3=url;const prev=document.getElementById('flash-banner-prev-3');if(prev){prev.src=url;prev.style.display='block';}})"></label>
             <button type="button" class="btn small ghost" style="margin-top:8px;" onclick="openMediaPicker(url=>{const d=(${isNew}?window.__draftFlash:FLASHSALES.find(x=>x.id==='${f.id}'));d.banner3=url;const prev=document.getElementById('flash-banner-prev-3');if(prev){prev.src=url;prev.style.display='block';}})">Choose from Media Library</button>
             <img id="flash-banner-prev-3" src="${f.banner3?mediaSrc(f.banner3):''}" style="width:110px;height:65px;object-fit:cover;border-radius:6px;margin-top:8px;${f.banner3?'':'display:none;'}">
 
@@ -1888,12 +1790,12 @@ function openBannerModal(id){
         <div class="field"><label>Visible</label><select name="visible"><option value="yes" ${b.visible?'selected':''}>Yes</option><option value="no" ${!b.visible?'selected':''}>No</option></select></div>
         <div class="field full"><label class="checkline"><input type="checkbox" name="heroSlider" ${b.heroSlider?'checked':''}> Include in Hero slider</label></div>
         <div class="field full"><label>Fallback image URL</label><input type="url" name="image" value="${esc(b.image||'')}" placeholder="https://..." >
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})">Choose from Media Library</button></div></div>
-        <div class="field full"><label>Upload image directly to Cloudinary</label><input type="file" accept="image/*" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})">Choose from Media Library</button></div></div>
+        <div class="field full"><label>Upload image from device</label><input type="file" accept="image/*" onchange="handleLocalFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.image=url;})"></div>
         <div class="field"><label>Desktop image URL</label><input type="url" name="desktopImage" value="${esc(b.desktopImage||'')}" placeholder="Optional"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload desktop<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})">Choose from Media</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload desktop<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.desktopImage=url;})">Choose from Media</button></div>
         <div class="field"><label>Mobile image URL</label><input type="url" name="mobileImage" value="${esc(b.mobileImage||'')}" placeholder="Optional"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload mobile<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})">Choose from Media</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:-8px;margin-bottom:8px;"><label class="btn small">Upload mobile<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const d=${isNew?'window.__draftBanner':`BANNERS.find(x=>x.id==='${b.id}')`};d.mobileImage=url;})">Choose from Media</button></div>
       </div>
       <fieldset class="seo-fieldset"><legend>Banner Design — Full Control</legend>
         <div class="form-grid">
@@ -1924,7 +1826,7 @@ function saveBannerForm(id,isNew){
 }
 
 /* ---------- Homepage Builder ---------- */
-let DRAG_IDX = null;
+
 function adminHomepage(){
   const items = SETTINGS.sections.map((s,i)=>`
     <div class="section-list-item" draggable="true" data-idx="${i}" ondragstart="DRAG_IDX=${i};this.classList.add('dragging');" ondragend="this.classList.remove('dragging');" ondragover="event.preventDefault();" ondrop="reorderSection(${i});">
@@ -1942,7 +1844,7 @@ function adminHomepage(){
   <div class="admin-card">${items || '<p style="color:var(--ink-soft);font-size:13.5px;">No sections yet.</p>'}</div>`;
 }
 
-function sectionTypeLabel(t){ return {hero:'Hero banner',flashsale:'Flash sale',categories:'Categories',productCollection:'Product collection',categoryShowcase:'Products by category (auto)',banner:'Promotional banner',customHtml:'Custom text/HTML'}[t]||t; }
+function sectionTypeLabel(t){ return {hero:'Hero banner',flashsale:'Flash sale',categories:'Categories',productCollection:'Product collection',categoryShowcase:'Products by category (auto)',banner:'Promotional banner',darazPromo:'Daraz mini banner',customHtml:'Custom text/HTML'}[t]||t; }
 
 function reorderSection(dropIdx){
   if(DRAG_IDX===null || DRAG_IDX===dropIdx) return;
@@ -2083,9 +1985,9 @@ function adminTheme(){
   return `<div class="admin-topbar"><h1>Theme &amp; Branding</h1></div>
   <div class="admin-card">
     <h3 style="margin-top:0;">Favicon / Browser &amp; Google Search Icon</h3>
-    <div class="help-note">Upload a square PNG/JPG/ICO/WebP icon. It is stored on Cloudinary and applied as the site's favicon. Google can display it after the deployed site is crawled; this HTML file alone cannot force Google indexing.</div>
+    <div class="help-note">Upload a square PNG/JPG/ICO/WebP icon. It is kept in this HTML/session and applied as the site's favicon. Google can display it after the deployed site is crawled; this HTML file alone cannot force Google indexing.</div>
     <div class="upload-box">
-      <input type="file" accept="image/png,image/jpeg,image/webp,image/x-icon" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);})">
+      <input type="file" accept="image/png,image/jpeg,image/webp,image/x-icon" onchange="handleLocalFileInput(this,url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);})">
       <input type="url" style="margin-top:8px;width:100%;" placeholder="Or paste favicon URL" value="${esc(SETTINGS.favicon||'')}" onchange="if(this.value){const input=this;handleImageUrlInput(input,url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);});}">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.favicon=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
       ${SETTINGS.favicon?`<img src="${mediaSrc(SETTINGS.favicon)}" style="width:64px;height:64px;object-fit:contain;margin:10px auto 0;border:1px solid var(--line);border-radius:8px;">`:''}
@@ -2109,7 +2011,7 @@ function adminTheme(){
     <h3 style="margin-top:0;">Logo Settings</h3>
     <div class="upload-box">
       <input type="url" placeholder="Logo Image URL yahan enter karein (https://...)" value="${esc(SETTINGS.logo||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.logo=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.logo=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
       ${SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" style="height:40px;margin-top:8px;" id="theme-logo-preview">`:''}
       <div class="upload-note">Recommended logo size: 300 x 80px (transparent PNG works best).</div>
     </div>
@@ -2156,7 +2058,7 @@ function adminTheme(){
       <div class="field">
         <label>Desktop / Laptop Hero Image URL</label>
         <div class="upload-box"><input type="url" placeholder="Desktop Hero Image URL yahan enter karein (https://...)" value="${esc(h.desktopImage||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.desktopImage=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.desktopImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.desktopImage?`<img src="${mediaSrc(h.desktopImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 1920 x 700px (wide banner).</div>
         ${h.desktopImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.desktopImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
@@ -2165,7 +2067,7 @@ function adminTheme(){
       <div class="field">
         <label>Mobile Hero Image URL</label>
         <div class="upload-box"><input type="url" placeholder="Mobile Hero Image URL yahan enter karein (https://...)" value="${esc(h.mobileImage||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.mobileImage=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.mobileImage=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.mobileImage?`<img src="${mediaSrc(h.mobileImage)}" style="height:70px;margin-top:8px;border-radius:6px;">`:''}
         <div class="upload-note">Recommended: 800 x 1000px (tall, portrait).</div>
         ${h.mobileImage?`<button type="button" class="btn small danger" style="margin-top:8px;width:100%;" onclick="SETTINGS.hero.mobileImage=null;saveKey(KEYS.settings,SETTINGS);">Remove</button>`:''}
@@ -2174,7 +2076,7 @@ function adminTheme(){
       <div class="field full">
         <label>Fallback Hero Image URL (used only if the mobile/desktop images above are not set)</label>
         <div class="upload-box"><input type="url" placeholder="Fallback Hero Image URL yahan enter karein (https://...)" value="${esc(h.image||'')}" onchange="if(this.value){ const input=this; handleImageUrlInput(input,url=>{ SETTINGS.hero.image=url||null; saveKey(KEYS.settings,SETTINGS); }); }">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.hero.image=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div>
         ${h.image?`<img src="${mediaSrc(h.image)}" style="height:70px;margin-top:8px;border-radius:6px;" id="hero-img-prev">`:''}
         ${h.image?`<button type="button" class="btn small danger" style="margin-top:8px;" onclick="SETTINGS.hero.image=null;saveKey(KEYS.settings,SETTINGS);toast('Fallback hero image removed');">Remove Fallback Image</button>`:''}
         </div>
@@ -2201,8 +2103,32 @@ function adminTheme(){
         <button class="btn" type="submit">Save Button Settings</button>
       </div>
     </form>
+  </div>
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Official Daraz Store Mini Banner</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);">This compact strip appears on the homepage. Edit every visible part here: title, description, button, link, image, size, colors and spacing.</p>
+    <form onsubmit="event.preventDefault();const fd=new FormData(this);SETTINGS.darazPromo=Object.assign({},SETTINGS.darazPromo,{enabled:fd.get('enabled')==='on',title:fd.get('title'),description:fd.get('description'),buttonText:fd.get('buttonText'),buttonUrl:fd.get('buttonUrl'),image:fd.get('image')||SETTINGS.darazPromo?.image||'',height:Number(fd.get('height'))||96,radius:Number(fd.get('radius'))||10,background:fd.get('background'),textColor:fd.get('textColor'),buttonBg:fd.get('buttonBg'),buttonColor:fd.get('buttonColor'),buttonBorder:fd.get('buttonBorder'),padding:Number(fd.get('padding'))||16});saveKey(KEYS.settings,SETTINGS);toast('Daraz mini banner saved');">
+      <div class="form-grid">
+        <div class="field full"><label class="checkline"><input type="checkbox" name="enabled" ${SETTINGS.darazPromo?.enabled?'checked':''}> Show mini banner</label></div>
+        <div class="field full"><label>Title</label><input type="text" name="title" value="${esc(SETTINGS.darazPromo?.title||'VG Tower Official Daraz Store')}"></div>
+        <div class="field full"><label>Description</label><input type="text" name="description" value="${esc(SETTINGS.darazPromo?.description||'')}"></div>
+        <div class="field full"><label>Mini Banner Image URL</label><input type="url" name="image" value="${esc(SETTINGS.darazPromo?.image||'')}" placeholder="https://..."><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.darazPromo.image=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.darazPromo.image=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div></div>
+        <div class="field"><label>Button Text</label><input type="text" name="buttonText" value="${esc(SETTINGS.darazPromo?.buttonText||'Visit')}"></div>
+        <div class="field"><label>Daraz Link</label><input type="url" name="buttonUrl" value="${esc(SETTINGS.darazPromo?.buttonUrl||'')}"></div>
+        <div class="field"><label>Height (px)</label><input type="number" name="height" value="${Number(SETTINGS.darazPromo?.height)||96}"></div>
+        <div class="field"><label>Corner Radius</label><input type="number" name="radius" value="${Number(SETTINGS.darazPromo?.radius)||10}"></div>
+        <div class="field"><label>Background</label><input type="text" name="background" value="${esc(SETTINGS.darazPromo?.background||'#FFF4EA')}"></div>
+        <div class="field"><label>Text Color</label><input type="text" name="textColor" value="${esc(SETTINGS.darazPromo?.textColor||'#1F2328')}"></div>
+        <div class="field"><label>Button Background</label><input type="text" name="buttonBg" value="${esc(SETTINGS.darazPromo?.buttonBg||'#F57224')}"></div>
+        <div class="field"><label>Button Text Color</label><input type="text" name="buttonColor" value="${esc(SETTINGS.darazPromo?.buttonColor||'#FFFFFF')}"></div>
+        <div class="field"><label>Button Border</label><input type="text" name="buttonBorder" value="${esc(SETTINGS.darazPromo?.buttonBorder||'#F57224')}"></div>
+        <div class="field"><label>Padding</label><input type="number" name="padding" value="${Number(SETTINGS.darazPromo?.padding)||16}"></div>
+      </div>
+      <button class="btn" style="margin-top:12px;" type="submit">Save Daraz Mini Banner</button>
+    </form>
   </div>`;
 }
+
 
 /* ---------- Navigation ---------- */
 function adminNav(){
@@ -2250,7 +2176,7 @@ function adminMedia(){
     <div class="upload-box">
       <input type="url" id="media-url-input" placeholder="Image URL yahan enter karein (https://...)" onkeydown="if(event.key==='Enter'){event.preventDefault();addMediaByUrl();}">
       <button type="button" class="btn small" style="margin-top:8px;" onclick="addMediaByUrl()">+ Add Image URL</button>
-      <label class="btn small" style="margin-top:8px;">+ Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleCloudinaryFileInput(this,url=>{MEDIA.push({id:uid(),name:url,dataUrl:url});saveKey(KEYS.media,MEDIA);toast('Image added to Media Library');})"></label>
+      <label class="btn small" style="margin-top:8px;">+ Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{MEDIA.push({id:uid(),name:url,dataUrl:url});saveKey(KEYS.media,MEDIA);toast('Image added to Media Library');})"></label>
       <div class="upload-note">Paste an image URL and click "Add Image URL" to save it to your library for reuse across the site.</div>
     </div>
   </div>
@@ -2265,17 +2191,14 @@ function adminMedia(){
 }
 
 async function addMediaByUrl(){
-  const input = document.getElementById('media-url-input');
-  const url = input && input.value.trim();
-  if(!url){ toast('Please enter an image URL'); return; }
-  input.disabled=true;
-  try{
-    const optimized=await uploadImageUrlToCloudinary(url,'Media');
-    MEDIA.push({id:uid(), name:optimized, dataUrl:optimized});
-    await saveKey(KEYS.media, MEDIA);
-    input.value=''; toast('Image uploaded, compressed and added to media library');
-  }catch(e){ toast('Image upload failed: '+e.message); }
-  finally{ input.disabled=false; }
+  const input=document.getElementById('media-url-input');
+  const url=input&&input.value.trim();
+  if(!url){toast('Please enter an image URL');return;}
+  if(!isValidHttpUrl(url) && !url.startsWith('data:image/')){toast('Please enter a valid image URL');return;}
+  MEDIA.push({id:uid(),name:url,dataUrl:url});
+  await saveKey(KEYS.media,MEDIA);
+  input.value='';
+  toast('Image added to Media Library ✓');
 }
 
 function deleteMedia(id){
@@ -2337,9 +2260,8 @@ function adminSettings(){
   const s=SETTINGS;
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
-    <div class="help-note"><b>Cloudinary:</b> Images are uploaded to Cloudinary and can be reused anywhere in the admin panel through the Media Library.</div>
-    <div class="help-note"><b>Cloudinary backup:</b> Every admin save now creates a real, unique RAW backup in Cloudinary. When the page is scrolled, a changed state is also backed up automatically (throttled to prevent duplicate uploads).</div>
-    <div class="help-note"><b>Important:</b> Cloudinary unsigned uploads cannot overwrite an existing asset. Therefore this file uses unique backup snapshots instead of pretending that unsigned <code>overwrite=true</code> works. A secure sync endpoint is still required only for making one canonical shared state that every user's browser can update.</div>
+    <div class="help-note"><b>Self-contained mode:</b> Images and settings stay inside this HTML page. No cloud backup or remote database is used.</div>
+    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Local HTML as shared JSON state. Already-open storefronts check Local HTML every 5 seconds and refresh automatically when the state changes.</div><div class="help-note"><b>Source configuration:</b> The demo content is embedded directly in this HTML. There are no API keys or cloud backup requirements.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
@@ -2378,7 +2300,19 @@ function saveGeneralSettings(form){
 function wireAdminEvents(){}
 
 /* ================= INIT ================= */
-boot();
+window.addEventListener('error', function(e){
+  console.error('Store.X runtime error:', e.error || e.message);
+});
+window.addEventListener('unhandledrejection', function(e){
+  console.error('Store.X promise error:', e.reason);
+});
+boot().catch(function(err){
+  console.error('Store.X boot failed:', err);
+  const app=document.getElementById('app');
+  if(app){
+    app.innerHTML='<div style=\"min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Store.X could not start</h2><p style=\"margin:0;color:#666\">The HTML file has been protected from a blank white screen. Check the browser console for the exact error.</p></div></div>';
+  }
+});
 </script>
 </body>
 </html>
