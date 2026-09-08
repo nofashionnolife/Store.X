@@ -329,6 +329,11 @@ const CLOUDINARY_CLOUD_NAME = 'u5bybnjc';
 const CLOUDINARY_UPLOAD_PRESET = 'storex_preset';
 const CLOUDINARY_IMAGE_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 const CLOUDINARY_RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
+// IMPORTANT: Cloudinary does not allow direct unsigned REST uploads to overwrite an existing asset.
+// Put your secure server/serverless endpoint here. The endpoint must accept POST JSON:
+// { key: string, data: any } and perform a SIGNED Cloudinary raw upload with overwrite=true.
+// Leave empty only for local-cache mode.
+const CLOUDINARY_SYNC_ENDPOINT = ''; // e.g. https://your-worker.example.com/storex-sync
 const CLOUDINARY_TRANSFORM = 'f_auto,q_auto:good,dpr_auto';
 const CLOUDINARY_STATE_FOLDER = 'storex-state';
 let CLOUDINARY_SYNC_BUSY = false;
@@ -430,40 +435,33 @@ async function cloudinaryFetchWithTimeout(url, options={}, timeoutMs=20000){
 }
 
 async function cloudinaryUploadJson(key,val){
-  const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
-  const payload={
-    schema:3,
-    key,
-    updatedAt:new Date().toISOString(),
-    updatedMs:Date.now(),
-    data:val
-  };
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
-  const fd=new FormData();
-  fd.append('file',blob,`${safe}.json`);
-  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
-  fd.append('folder',CLOUDINARY_STATE_FOLDER);
-  fd.append('public_id',safe+'.json');
-  fd.append('resource_type','raw');
-  fd.append('type','upload');
-  fd.append('overwrite','true');
-  fd.append('invalidate','true');
-
-  let lastError=null;
-  for(let attempt=1;attempt<=3;attempt++){
-    try{
-      const res=await cloudinaryFetchWithTimeout(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd},20000);
-      let data={}; try{data=await res.json();}catch(_){}
-      if(res.ok && data.secure_url){
-        return data;
-      }
-      lastError=new Error(data?.error?.message || (`Cloudinary upload failed (HTTP ${res.status})`));
-    }catch(e){ lastError=e; }
-    if(attempt<3) await new Promise(r=>setTimeout(r,700*attempt));
+  // Secure mode: the browser sends state to your serverless endpoint. The
+  // Cloudinary API secret never belongs in this HTML file.
+  if(CLOUDINARY_SYNC_ENDPOINT){
+    const payload={schema:3,key,updatedAt:new Date().toISOString(),updatedMs:Date.now(),data:val};
+    let lastError=null;
+    for(let attempt=1;attempt<=3;attempt++){
+      try{
+        const res=await cloudinaryFetchWithTimeout(CLOUDINARY_SYNC_ENDPOINT,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify(payload)
+        },20000);
+        let data={}; try{data=await res.json();}catch(_){}
+        if(res.ok && (data.ok===true || data.secure_url || data.result)) return data;
+        lastError=new Error(data?.error || data?.message || `Sync endpoint failed (HTTP ${res.status})`);
+      }catch(e){ lastError=e; }
+      if(attempt<3) await new Promise(r=>setTimeout(r,700*attempt));
+    }
+    throw lastError || new Error('Secure Cloudinary sync failed');
   }
-  throw lastError || new Error('Cloudinary upload failed');
-}
 
+  // Do NOT attempt an unsigned overwrite. Cloudinary explicitly treats
+  // overwrite=false for unsigned REST uploads, even if the request contains
+  // overwrite=true. Doing so only creates the misleading failure seen in the
+  // original Store.X file.
+  throw new Error('Cloudinary sync endpoint is not configured. Direct unsigned RAW overwrite is not supported.');
+}
 async function loadFromCloudinary(key){
   try{
     const res=await cloudinaryFetchWithTimeout(cloudinaryStatePublicUrl(key,true),{
@@ -520,7 +518,7 @@ async function saveKey(key,val){
     toast('Saved to Cloudinary ✓');
     return true;
   }catch(e){
-    toast('Cloudinary save failed — change kept locally. Check storex_preset RAW + overwrite settings.');
+    toast(CLOUDINARY_SYNC_ENDPOINT ? 'Cloudinary sync failed — change kept locally; retrying.' : 'Saved locally. Add a secure Cloudinary sync endpoint to enable cross-user backup.');
     return false;
   }
 }
