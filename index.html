@@ -333,6 +333,10 @@ const CLOUDINARY_TRANSFORM = 'f_auto,q_auto:good,dpr_auto';
 const CLOUDINARY_STATE_FOLDER = 'storex-state';
 let CLOUDINARY_SYNC_BUSY = false;
 let CLOUDINARY_SYNC_TIMER = null;
+let CLOUDINARY_SYNC_QUEUE = Promise.resolve();
+let CLOUDINARY_LAST_SYNC = 0;
+const CLOUDINARY_SYNC_INTERVAL = 5000; // storefront clients check for admin changes every 5 seconds
+const CLOUDINARY_STATE_CACHE_BUSTER = () => Date.now().toString();
 
 // Global application state. These declarations are required before boot().
 let SETTINGS = null;
@@ -408,38 +412,95 @@ function localWrite(key,val){
 }
 function cloudinaryStatePublicUrl(key, bustCache=true){
   const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
-  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_STATE_FOLDER}/${safe}.json${bustCache?'?v='+Date.now():''}`;
+  // Query-string cache busting is intentional: all storefront visitors must see
+  // the newest JSON after an admin save instead of a CDN-cached copy.
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_STATE_FOLDER}/${safe}.json${bustCache?'?v='+CLOUDINARY_STATE_CACHE_BUSTER():''}`;
 }
+
+function cloudinaryStatePublicUrlVersioned(key, version){
+  const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/v${version}/${CLOUDINARY_STATE_FOLDER}/${safe}.json`;
+}
+
 async function cloudinaryUploadJson(key,val){
+  const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
   const blob=new Blob([JSON.stringify(val)],{type:'application/json'});
   const fd=new FormData();
-  fd.append('file',blob,`${String(key).replace(/[^A-Za-z0-9._-]/g,'_')}.json`);
+  fd.append('file',blob,`${safe}.json`);
   fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
   fd.append('folder',CLOUDINARY_STATE_FOLDER);
-  fd.append('public_id',String(key).replace(/[^A-Za-z0-9._-]/g,'_')+'.json');
-  const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd});
-  let data={}; try{data=await res.json();}catch(_){ }
-  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || ('Cloudinary state upload HTTP '+res.status));
-  return data.secure_url;
+  fd.append('public_id',safe+'.json');
+  // Required for repeatedly replacing the same state object. Configure the
+  // unsigned upload preset with "Overwrite" enabled as well.
+  fd.append('overwrite','true');
+  fd.append('invalidate','true');
+
+  const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd,cache:'no-store'});
+  let data={}; try{data=await res.json();}catch(_){}
+  if(!res.ok || !data.secure_url){
+    throw new Error(data?.error?.message || ('Cloudinary state upload HTTP '+res.status));
+  }
+  return data;
 }
+
 async function loadFromCloudinary(key){
   try{
-    const res=await fetch(cloudinaryStatePublicUrl(key,true),{cache:'no-store'});
+    const res=await fetch(cloudinaryStatePublicUrl(key,true),{
+      cache:'no-store',
+      headers:{'Accept':'application/json'}
+    });
     if(!res.ok)return null;
     return await res.json();
-  }catch(e){console.warn('Cloudinary state read skipped:',key,e.message||e);return null;}
+  }catch(e){
+    console.warn('Cloudinary state read skipped:',key,e.message||e);
+    return null;
+  }
 }
+
 async function saveToCloudinary(key,val){
-  try{await cloudinaryUploadJson(key,val);return true;}
-  catch(e){console.warn('Cloudinary state save skipped:',key,e.message||e);return false;}
+  try{
+    const data=await cloudinaryUploadJson(key,val);
+    CLOUDINARY_LAST_SYNC=Date.now();
+    return !!data.secure_url;
+  }catch(e){
+    console.warn('Cloudinary state save skipped:',key,e.message||e);
+    return false;
+  }
 }
-async function loadKey(key,fallback){return localRead(key,fallback);}
+
+// Queue state writes so rapid admin edits cannot race each other and upload an
+// older snapshot after a newer snapshot.
+function queueCloudinarySave(key,val){
+  const snapshot=JSON.parse(JSON.stringify(val));
+  CLOUDINARY_SYNC_QUEUE=CLOUDINARY_SYNC_QUEUE
+    .catch(()=>{})
+    .then(async()=>{
+      const ok=await saveToCloudinary(key,snapshot);
+      if(!ok) throw new Error('Cloudinary sync failed for '+key);
+      return true;
+    })
+    .catch(e=>{
+      console.warn('Queued Cloudinary sync failed:',e.message||e);
+      toast('Saved locally, but Cloudinary sync failed. Check the unsigned preset.');
+      return false;
+    });
+  return CLOUDINARY_SYNC_QUEUE;
+}
+
+async function loadKey(key,fallback){
+  return localRead(key,fallback);
+}
+
 async function saveKey(key,val){
-  localWrite(key,val); applyTheme(); render();
-  const ok=await saveToCloudinary(key,val);
-  if(!ok) toast('Saved locally. Cloudinary state sync failed; check the upload preset allows RAW files.');
+  // Local cache is updated first so the admin UI remains responsive/offline-capable.
+  localWrite(key,val);
+  applyTheme();
+  render();
+  // Every admin save goes through the same queued Cloudinary state writer.
+  return queueCloudinarySave(key,val);
 }
-async function syncFromCloudinary(forceRender=false){
+
+async function refreshStateFromCloudinary(forceRender=false){
   if(CLOUDINARY_SYNC_BUSY)return;
   CLOUDINARY_SYNC_BUSY=true;
   try{
@@ -447,20 +508,52 @@ async function syncFromCloudinary(forceRender=false){
     let changed=false;
     for(const key of keys){
       const remote=await loadFromCloudinary(key);
-      if(remote!==null && JSON.stringify(remote)!==localStorage.getItem(key)){localWrite(key,remote);changed=true;}
+      if(remote!==null){
+        const local=localStorage.getItem(key);
+        if(JSON.stringify(remote)!==local){
+          localWrite(key,remote);
+          changed=true;
+        }
+      }
     }
     if(changed||forceRender){
       SETTINGS=await loadKey(KEYS.settings,DEFAULT_SETTINGS);
-      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})});
-      PRODUCTS=await loadKey(KEYS.products,[]); CATEGORIES=await loadKey(KEYS.categories,seedCategories());
-      FLASHSALES=await loadKey(KEYS.flashsales,[]); BANNERS=await loadKey(KEYS.banners,[]); MEDIA=await loadKey(KEYS.media,[]); PAGES=await loadKey(KEYS.pages,seedPages());
-      applyTheme(); render();
+      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{
+        hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
+        footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{
+          social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})
+        }),
+        search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
+        mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
+      });
+      PRODUCTS=await loadKey(KEYS.products,[]);
+      CATEGORIES=await loadKey(KEYS.categories,seedCategories());
+      FLASHSALES=await loadKey(KEYS.flashsales,[]);
+      BANNERS=await loadKey(KEYS.banners,[]);
+      MEDIA=await loadKey(KEYS.media,[]);
+      PAGES=await loadKey(KEYS.pages,seedPages());
+      applyTheme();
+      render();
     }
-  }finally{CLOUDINARY_SYNC_BUSY=false;}
+  }finally{
+    CLOUDINARY_SYNC_BUSY=false;
+  }
 }
+
+// Backwards-compatible name used by boot() and any existing code.
+async function syncFromCloudinary(forceRender=false){
+  return refreshStateFromCloudinary(forceRender);
+}
+
 function startCloudinarySync(){
   if(CLOUDINARY_SYNC_TIMER)clearInterval(CLOUDINARY_SYNC_TIMER);
-  CLOUDINARY_SYNC_TIMER=setInterval(()=>syncFromCloudinary(false),30000);
+  // Five-second polling makes admin changes propagate to already-open
+  // storefronts without requiring a page refresh.
+  CLOUDINARY_SYNC_TIMER=setInterval(()=>refreshStateFromCloudinary(false),CLOUDINARY_SYNC_INTERVAL);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')refreshStateFromCloudinary(false);
+  });
+  window.addEventListener('focus',()=>refreshStateFromCloudinary(false));
 }
 
 function cloudinaryOptimizedUrl(url, width){
@@ -512,8 +605,7 @@ async function rememberMediaUrl(url){
   if(!url)return;
   if(!MEDIA.some(m=>m.dataUrl===url || m.name===url)){
     MEDIA.push({id:uid(),name:url,dataUrl:url});
-    localWrite(KEYS.media,MEDIA);
-    saveToCloudinary(KEYS.media,MEDIA).catch(()=>{});
+    saveKey(KEYS.media,MEDIA);
   }
 }
 async function handleCloudinaryFileInput(input,callback){
@@ -1270,6 +1362,11 @@ function renderAdminView(){
 }
 
 /* ---------- Dashboard ---------- */
+function cloudinarySyncStatus(){
+  const age=CLOUDINARY_LAST_SYNC ? Math.max(0,Math.round((Date.now()-CLOUDINARY_LAST_SYNC)/1000)) : null;
+  return age===null ? 'Cloudinary sync: waiting' : `Cloudinary sync: ${age}s ago`;
+}
+
 function adminDashboard(){
   const published = PRODUCTS.filter(p=>p.status==='published').length;
   const hidden = PRODUCTS.filter(p=>p.status==='hidden').length;
@@ -2152,7 +2249,8 @@ function adminSettings(){
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
     <div class="help-note"><b>Cloudinary:</b> Images are uploaded to Cloudinary and can be reused anywhere in the admin panel through the Media Library.</div>
-    <div class="help-note"><b>Cloud data sync:</b> Store settings, products, categories, banners, flash sales, pages and media metadata are cached locally and synced as JSON files to Cloudinary. Your Cloudinary unsigned upload preset must allow RAW uploads for cross-device syncing to work.</div>
+    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Cloudinary as shared JSON state. Already-open storefronts check Cloudinary every 5 seconds and refresh automatically when the state changes.</div>
+    <div class="help-note"><b>Cloudinary preset requirement:</b> The <code>storex_preset</code> unsigned preset must allow <b>RAW</b> uploads and <b>Overwrite</b>. The Cloudinary API key/secret is intentionally not placed in this browser file.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
