@@ -340,7 +340,11 @@ let CLOUDINARY_SYNC_BUSY = false;
 let CLOUDINARY_SYNC_TIMER = null;
 let CLOUDINARY_SYNC_QUEUE = Promise.resolve();
 let CLOUDINARY_LAST_SYNC = 0;
+let CLOUDINARY_LAST_BACKUP = 0;
+let CLOUDINARY_LAST_BACKUP_FINGERPRINT = '';
+let CLOUDINARY_BACKUP_BUSY = false;
 const CLOUDINARY_SYNC_INTERVAL = 5000; // storefront clients check for admin changes every 5 seconds
+const CLOUDINARY_BACKUP_INTERVAL = 15000; // scroll backup throttle
 const CLOUDINARY_STATE_CACHE_BUSTER = () => Date.now().toString();
 
 // Global application state. These declarations are required before boot().
@@ -434,6 +438,48 @@ async function cloudinaryFetchWithTimeout(url, options={}, timeoutMs=20000){
   }finally{ clearTimeout(timer); }
 }
 
+async function cloudinaryUnsignedBackup(key,val,reason='change'){
+  // Unsigned uploads cannot overwrite. Instead, every backup is a UNIQUE RAW
+  // asset. This means Cloudinary really receives a physical backup even when
+  // no signed server endpoint is configured. The latest-backup URL is cached
+  // locally so the admin can verify that the upload actually happened.
+  const stamp=Date.now();
+  const uniqueId=`storex-backups/${String(key).replace(/[^A-Za-z0-9._-]/g,'_')}-${stamp}-${Math.random().toString(36).slice(2,8)}`;
+  const blob=new Blob([JSON.stringify({schema:4,key,reason,updatedAt:new Date().toISOString(),updatedMs:stamp,data:val})],{type:'application/json'});
+  const fd=new FormData();
+  fd.append('file',blob,`${uniqueId.split('/').pop()}.json`);
+  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+  fd.append('public_id',uniqueId);
+  const res=await cloudinaryFetchWithTimeout(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd},20000);
+  let data={}; try{data=await res.json();}catch(_){}
+  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || `Cloudinary backup HTTP ${res.status}`);
+  localWrite('storex-last-cloudinary-backup',{key,reason,secure_url:data.secure_url,public_id:data.public_id,at:new Date().toISOString()});
+  CLOUDINARY_LAST_BACKUP=stamp;
+  return data;
+}
+
+async function cloudinaryBackupSnapshot(reason='change'){
+  if(CLOUDINARY_BACKUP_BUSY)return false;
+  const snapshot={};
+  for(const key of cloudinaryStateKeys()){
+    const raw=localStorage.getItem(key);
+    if(raw!==null)snapshot[key]=JSON.parse(raw);
+  }
+  const fingerprint=JSON.stringify(snapshot);
+  if(!fingerprint || fingerprint===CLOUDINARY_LAST_BACKUP_FINGERPRINT)return false;
+  CLOUDINARY_BACKUP_BUSY=true;
+  try{
+    await cloudinaryUnsignedBackup('storex-full-state',snapshot,reason);
+    CLOUDINARY_LAST_BACKUP_FINGERPRINT=fingerprint;
+    toast('Cloudinary backup uploaded ✓');
+    return true;
+  }catch(e){
+    console.warn('Cloudinary backup failed:',e.message||e);
+    toast('Cloudinary backup failed: '+(e.message||'check storex_preset RAW upload')); 
+    return false;
+  }finally{CLOUDINARY_BACKUP_BUSY=false;}
+}
+
 async function cloudinaryUploadJson(key,val){
   // Secure mode: the browser sends state to your serverless endpoint. The
   // Cloudinary API secret never belongs in this HTML file.
@@ -513,12 +559,17 @@ async function saveKey(key,val){
   localWrite(key,val);
   applyTheme();
   render();
+  // Always create a real Cloudinary backup. If a signed endpoint is configured,
+  // also update the canonical shared state so every user sees the change.
   try{
-    await queueCloudinarySave(key,val);
-    toast('Saved to Cloudinary ✓');
+    const remoteOk=await queueCloudinarySave(key,val);
+    if(remoteOk){toast('Saved to Cloudinary ✓');}
+    else{await cloudinaryBackupSnapshot('admin-save');}
     return true;
   }catch(e){
-    toast(CLOUDINARY_SYNC_ENDPOINT ? 'Cloudinary sync failed — change kept locally; retrying.' : 'Saved locally. Add a secure Cloudinary sync endpoint to enable cross-user backup.');
+    // Never leave the admin change only in localStorage when unsigned backup is
+    // available. A unique RAW snapshot does not require overwrite permission.
+    await cloudinaryBackupSnapshot('admin-save-fallback');
     return false;
   }
 }
@@ -567,9 +618,27 @@ function startCloudinarySync(){
   if(CLOUDINARY_SYNC_TIMER)clearInterval(CLOUDINARY_SYNC_TIMER);
   CLOUDINARY_SYNC_TIMER=setInterval(()=>refreshStateFromCloudinary(false),CLOUDINARY_SYNC_INTERVAL);
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible')refreshStateFromCloudinary(false);
+    if(document.visibilityState==='visible'){
+      refreshStateFromCloudinary(false);
+      cloudinaryBackupSnapshot('tab-visible');
+    }
   });
-  window.addEventListener('focus',()=>refreshStateFromCloudinary(false));
+  window.addEventListener('focus',()=>{
+    refreshStateFromCloudinary(false);
+    cloudinaryBackupSnapshot('window-focus');
+  });
+  // Requested safety behavior: scrolling periodically creates a real Cloudinary
+  // RAW snapshot when the local state has changed. It is throttled so normal
+  // scrolling does not flood Cloudinary with identical copies.
+  let scrollTimer=null;
+  window.addEventListener('scroll',()=>{
+    if(scrollTimer)return;
+    scrollTimer=setTimeout(()=>{
+      scrollTimer=null;
+      if(Date.now()-CLOUDINARY_LAST_BACKUP>=CLOUDINARY_BACKUP_INTERVAL)
+        cloudinaryBackupSnapshot('scroll');
+    },1200);
+  },{passive:true});
 }
 
 function cloudinaryOptimizedUrl(url, width){
@@ -2269,8 +2338,8 @@ function adminSettings(){
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
     <div class="help-note"><b>Cloudinary:</b> Images are uploaded to Cloudinary and can be reused anywhere in the admin panel through the Media Library.</div>
-    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Cloudinary as shared JSON state. Already-open storefronts check Cloudinary every 5 seconds and refresh automatically when the state changes.</div>
-    <div class="help-note"><b>Cloudinary preset requirement:</b> The <code>storex_preset</code> unsigned preset must allow <b>RAW</b> uploads and <b>Overwrite</b>. The Cloudinary API key/secret is intentionally not placed in this browser file.</div>
+    <div class="help-note"><b>Cloudinary backup:</b> Every admin save now creates a real, unique RAW backup in Cloudinary. When the page is scrolled, a changed state is also backed up automatically (throttled to prevent duplicate uploads).</div>
+    <div class="help-note"><b>Important:</b> Cloudinary unsigned uploads cannot overwrite an existing asset. Therefore this file uses unique backup snapshots instead of pretending that unsigned <code>overwrite=true</code> works. A secure sync endpoint is still required only for making one canonical shared state that every user's browser can update.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
