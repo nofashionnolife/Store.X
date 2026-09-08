@@ -331,10 +331,15 @@ const CLOUDINARY_IMAGE_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINAR
 const CLOUDINARY_RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
 const CLOUDINARY_TRANSFORM = 'f_auto,q_auto:good,dpr_auto';
 const CLOUDINARY_STATE_FOLDER = 'storex-state';
+const CLOUDINARY_BACKUP_FOLDER = 'storex-backups';
+const CLOUDINARY_BACKUP_MANIFEST = 'storex-latest-backup.json';
 let CLOUDINARY_SYNC_BUSY = false;
 let CLOUDINARY_SYNC_TIMER = null;
 let CLOUDINARY_SYNC_QUEUE = Promise.resolve();
 let CLOUDINARY_LAST_SYNC = 0;
+let CLOUDINARY_LAST_BACKUP = 0;
+let CLOUDINARY_LAST_ERROR = '';
+let CLOUDINARY_SYNC_OK = false;
 const CLOUDINARY_SYNC_INTERVAL = 5000; // storefront clients check for admin changes every 5 seconds
 const CLOUDINARY_STATE_CACHE_BUSTER = () => Date.now().toString();
 
@@ -412,9 +417,12 @@ function localWrite(key,val){
 }
 function cloudinaryStatePublicUrl(key, bustCache=true){
   const safe=String(key).replace(/[^A-Za-z0-9._-]/g,'_');
-  // Query-string cache busting is intentional: all storefront visitors must see
-  // the newest JSON after an admin save instead of a CDN-cached copy.
   return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_STATE_FOLDER}/${safe}.json${bustCache?'?v='+CLOUDINARY_STATE_CACHE_BUSTER():''}`;
+}
+
+function cloudinaryBackupPublicUrl(id, bustCache=true){
+  const safe=String(id).replace(/[^A-Za-z0-9._-]/g,'_');
+  return `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_BACKUP_FOLDER}/${safe}.json${bustCache?'?v='+CLOUDINARY_STATE_CACHE_BUSTER():''}`;
 }
 
 function cloudinaryStatePublicUrlVersioned(key, version){
@@ -430,25 +438,155 @@ async function cloudinaryUploadJson(key,val){
   fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
   fd.append('folder',CLOUDINARY_STATE_FOLDER);
   fd.append('public_id',safe+'.json');
-  // Required for repeatedly replacing the same state object. Configure the
-  // unsigned upload preset with "Overwrite" enabled as well.
   fd.append('overwrite','true');
   fd.append('invalidate','true');
-
   const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd,cache:'no-store'});
   let data={}; try{data=await res.json();}catch(_){}
   if(!res.ok || !data.secure_url){
-    throw new Error(data?.error?.message || ('Cloudinary state upload HTTP '+res.status));
+    throw new Error(data?.error?.message || (`Cloudinary state upload HTTP ${res.status}`));
   }
   return data;
 }
 
+async function cloudinaryUploadBackup(backup){
+  const id='backup-'+new Date().toISOString().replace(/[-:TZ.]/g,'')+'-'+Math.random().toString(36).slice(2,8);
+  const blob=new Blob([JSON.stringify(backup)],{type:'application/json'});
+  const fd=new FormData();
+  fd.append('file',blob,`${id}.json`);
+  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+  fd.append('folder',CLOUDINARY_BACKUP_FOLDER);
+  fd.append('public_id',id+'.json');
+  const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd,cache:'no-store'});
+  let data={}; try{data=await res.json();}catch(_){}
+  if(!res.ok || !data.secure_url){
+    throw new Error(data?.error?.message || (`Cloudinary backup upload HTTP ${res.status}`));
+  }
+  return {id,data};
+}
+
+function buildStoreBackup(){
+  return {
+    app:'Store.X',
+    format:2,
+    createdAt:new Date().toISOString(),
+    keys:{...KEYS},
+    settings:SETTINGS,
+    products:PRODUCTS,
+    categories:CATEGORIES,
+    flashsales:FLASHSALES,
+    banners:BANNERS,
+    media:MEDIA,
+    pages:PAGES
+  };
+}
+
+function applyStoreBackup(backup){
+  if(!backup || typeof backup!=='object') throw new Error('Invalid backup file');
+  const required=['settings','products','categories','flashsales','banners','media','pages'];
+  if(required.some(k=>!(k in backup))) throw new Error('Backup is incomplete');
+  localWrite(KEYS.settings,backup.settings);
+  localWrite(KEYS.products,backup.products);
+  localWrite(KEYS.categories,backup.categories);
+  localWrite(KEYS.flashsales,backup.flashsales);
+  localWrite(KEYS.banners,backup.banners);
+  localWrite(KEYS.media,backup.media);
+  localWrite(KEYS.pages,backup.pages);
+}
+
+async function uploadBackupManifest(backupId,createdAt){
+  const manifest={app:'Store.X',format:2,backupId,createdAt,updatedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
+  const fd=new FormData();
+  fd.append('file',blob,CLOUDINARY_BACKUP_MANIFEST);
+  fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+  fd.append('folder',CLOUDINARY_BACKUP_FOLDER);
+  fd.append('public_id',CLOUDINARY_BACKUP_MANIFEST);
+  fd.append('overwrite','true');
+  fd.append('invalidate','true');
+  const res=await fetch(CLOUDINARY_RAW_UPLOAD_URL,{method:'POST',body:fd,cache:'no-store'});
+  let data={}; try{data=await res.json();}catch(_){}
+  if(!res.ok || !data.secure_url) throw new Error(data?.error?.message || (`Cloudinary manifest upload HTTP ${res.status}`));
+  return manifest;
+}
+
+async function loadCloudinaryManifest(){
+  try{
+    const url=`https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/raw/upload/${CLOUDINARY_BACKUP_FOLDER}/${CLOUDINARY_BACKUP_MANIFEST}?v=${Date.now()}`;
+    const res=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'}});
+    if(!res.ok)return null;
+    return await res.json();
+  }catch(e){return null;}
+}
+
+async function loadCloudinaryBackup(){
+  const manifest=await loadCloudinaryManifest();
+  if(!manifest?.backupId) throw new Error('No Cloudinary backup manifest found');
+  const res=await fetch(cloudinaryBackupPublicUrl(manifest.backupId,true),{cache:'no-store',headers:{'Accept':'application/json'}});
+  if(!res.ok) throw new Error(`Backup download HTTP ${res.status}`);
+  const backup=await res.json();
+  return {manifest,backup};
+}
+
+async function createCloudinaryBackup(showToast=true){
+  const backup=buildStoreBackup();
+  const result=await cloudinaryUploadBackup(backup);
+  await uploadBackupManifest(result.id,backup.createdAt);
+  CLOUDINARY_LAST_BACKUP=Date.now();
+  CLOUDINARY_LAST_SYNC=Date.now();
+  CLOUDINARY_LAST_ERROR='';
+  CLOUDINARY_SYNC_OK=true;
+  if(showToast) toast('Complete Cloudinary backup created');
+  return result.id;
+}
+
+async function restoreLatestCloudinaryBackup(showToast=true){
+  const {manifest,backup}=await loadCloudinaryBackup();
+  applyStoreBackup(backup);
+  await hydrateFromLocalStorage();
+  CLOUDINARY_LAST_SYNC=Date.now();
+  CLOUDINARY_LAST_ERROR='';
+  CLOUDINARY_SYNC_OK=true;
+  if(showToast){ render(); toast(`Restored Cloudinary backup from ${new Date(manifest.createdAt).toLocaleString()}`); }
+  return manifest;
+}
+
+async function testCloudinaryBackup(){
+  try{
+    const id=await createCloudinaryBackup(false);
+    const loaded=await loadCloudinaryBackup();
+    if(loaded?.manifest?.backupId!==id) throw new Error('Backup manifest verification failed');
+    CLOUDINARY_LAST_ERROR=''; CLOUDINARY_SYNC_OK=true;
+    toast('Cloudinary backup test passed');
+    render();
+  }catch(e){
+    CLOUDINARY_SYNC_OK=false;
+    CLOUDINARY_LAST_ERROR=e.message||String(e);
+    console.error('Cloudinary backup test failed',e);
+    toast('Cloudinary backup failed: '+CLOUDINARY_LAST_ERROR);
+    render();
+  }
+}
+
+function downloadLocalBackup(){
+  const blob=new Blob([JSON.stringify(buildStoreBackup(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='storex-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+async function cloudinaryStateWrite(key,val){
+  const data=await cloudinaryUploadJson(key,val);
+  CLOUDINARY_LAST_SYNC=Date.now();
+  CLOUDINARY_LAST_ERROR='';
+  CLOUDINARY_SYNC_OK=true;
+  return !!data.secure_url;
+}
+
 async function loadFromCloudinary(key){
   try{
-    const res=await fetch(cloudinaryStatePublicUrl(key,true),{
-      cache:'no-store',
-      headers:{'Accept':'application/json'}
-    });
+    const res=await fetch(cloudinaryStatePublicUrl(key,true),{cache:'no-store',headers:{'Accept':'application/json'}});
     if(!res.ok)return null;
     return await res.json();
   }catch(e){
@@ -458,46 +596,43 @@ async function loadFromCloudinary(key){
 }
 
 async function saveToCloudinary(key,val){
-  try{
-    const data=await cloudinaryUploadJson(key,val);
-    CLOUDINARY_LAST_SYNC=Date.now();
-    return !!data.secure_url;
-  }catch(e){
-    console.warn('Cloudinary state save skipped:',key,e.message||e);
+  try{return await cloudinaryStateWrite(key,val);}catch(e){
+    CLOUDINARY_SYNC_OK=false;
+    CLOUDINARY_LAST_ERROR=e.message||String(e);
+    console.warn('Cloudinary state save skipped:',key,CLOUDINARY_LAST_ERROR);
     return false;
   }
 }
 
-// Queue state writes so rapid admin edits cannot race each other and upload an
-// older snapshot after a newer snapshot.
 function queueCloudinarySave(key,val){
   const snapshot=JSON.parse(JSON.stringify(val));
-  CLOUDINARY_SYNC_QUEUE=CLOUDINARY_SYNC_QUEUE
-    .catch(()=>{})
-    .then(async()=>{
-      const ok=await saveToCloudinary(key,snapshot);
-      if(!ok) throw new Error('Cloudinary sync failed for '+key);
-      return true;
-    })
-    .catch(e=>{
-      console.warn('Queued Cloudinary sync failed:',e.message||e);
-      toast('Saved locally, but Cloudinary sync failed. Check the unsigned preset.');
-      return false;
-    });
+  CLOUDINARY_SYNC_QUEUE=CLOUDINARY_SYNC_QUEUE.catch(()=>{}).then(async()=>{
+    const ok=await saveToCloudinary(key,snapshot);
+    if(!ok) throw new Error('Cloudinary sync failed for '+key);
+    return true;
+  }).catch(e=>{
+    CLOUDINARY_SYNC_OK=false; CLOUDINARY_LAST_ERROR=e.message||String(e);
+    console.warn('Queued Cloudinary sync failed:',CLOUDINARY_LAST_ERROR);
+    toast('Saved locally, but Cloudinary sync failed: '+CLOUDINARY_LAST_ERROR);
+    return false;
+  });
   return CLOUDINARY_SYNC_QUEUE;
 }
 
-async function loadKey(key,fallback){
-  return localRead(key,fallback);
-}
-
-async function saveKey(key,val){
-  // Local cache is updated first so the admin UI remains responsive/offline-capable.
-  localWrite(key,val);
-  applyTheme();
-  render();
-  // Every admin save goes through the same queued Cloudinary state writer.
-  return queueCloudinarySave(key,val);
+async function hydrateFromLocalStorage(){
+  SETTINGS=await loadKey(KEYS.settings,DEFAULT_SETTINGS);
+  SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{
+    hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
+    footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),
+    search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
+    mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
+  });
+  PRODUCTS=await loadKey(KEYS.products,[]);
+  CATEGORIES=await loadKey(KEYS.categories,seedCategories());
+  FLASHSALES=await loadKey(KEYS.flashsales,[]);
+  BANNERS=await loadKey(KEYS.banners,[]);
+  MEDIA=await loadKey(KEYS.media,[]);
+  PAGES=await loadKey(KEYS.pages,seedPages());
 }
 
 async function refreshStateFromCloudinary(forceRender=false){
@@ -510,34 +645,11 @@ async function refreshStateFromCloudinary(forceRender=false){
       const remote=await loadFromCloudinary(key);
       if(remote!==null){
         const local=localStorage.getItem(key);
-        if(JSON.stringify(remote)!==local){
-          localWrite(key,remote);
-          changed=true;
-        }
+        if(JSON.stringify(remote)!==local){ localWrite(key,remote); changed=true; }
       }
     }
-    if(changed||forceRender){
-      SETTINGS=await loadKey(KEYS.settings,DEFAULT_SETTINGS);
-      SETTINGS=Object.assign({},DEFAULT_SETTINGS,SETTINGS,{
-        hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
-        footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{
-          social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})
-        }),
-        search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
-        mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
-      });
-      PRODUCTS=await loadKey(KEYS.products,[]);
-      CATEGORIES=await loadKey(KEYS.categories,seedCategories());
-      FLASHSALES=await loadKey(KEYS.flashsales,[]);
-      BANNERS=await loadKey(KEYS.banners,[]);
-      MEDIA=await loadKey(KEYS.media,[]);
-      PAGES=await loadKey(KEYS.pages,seedPages());
-      applyTheme();
-      render();
-    }
-  }finally{
-    CLOUDINARY_SYNC_BUSY=false;
-  }
+    if(changed||forceRender){ await hydrateFromLocalStorage(); applyTheme(); render(); }
+  }finally{ CLOUDINARY_SYNC_BUSY=false; }
 }
 
 // Backwards-compatible name used by boot() and any existing code.
@@ -641,20 +753,7 @@ async function processImageField(input,getTarget,prop,previewId){
 }
 
 async function boot(){
-  
-  SETTINGS = await loadKey(KEYS.settings, DEFAULT_SETTINGS);
-  SETTINGS = Object.assign({}, DEFAULT_SETTINGS, SETTINGS, {
-    hero:Object.assign({},DEFAULT_SETTINGS.hero,SETTINGS.hero||{}),
-    footer:Object.assign({},DEFAULT_SETTINGS.footer,SETTINGS.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(SETTINGS.footer&&SETTINGS.footer.social)||{})}),
-    search:Object.assign({},DEFAULT_SETTINGS.search,SETTINGS.search||{}),
-    mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
-  });
-  PRODUCTS = await loadKey(KEYS.products, []);
-  CATEGORIES = await loadKey(KEYS.categories, seedCategories());
-  FLASHSALES = await loadKey(KEYS.flashsales, []);
-  BANNERS = await loadKey(KEYS.banners, []);
-  MEDIA = await loadKey(KEYS.media, []);
-  PAGES = await loadKey(KEYS.pages, seedPages());
+  await hydrateFromLocalStorage();
   applyTheme();
   injectGA();
   window.addEventListener('hashchange', render);
@@ -2262,6 +2361,19 @@ function adminSettings(){
       </div>
       <button class="btn" style="margin-top:14px;" type="submit">Save General Settings</button>
     </form>
+  </div>
+  <div class="admin-card">
+    <h3 style="margin-top:0;">Cloudinary Backup & Restore</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);">This creates one complete JSON backup containing settings, products, categories, flash sales, banners, media and pages. Each backup gets a unique Cloudinary file, while a small latest-backup manifest points to the newest one.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">
+      <button type="button" class="btn small" onclick="createCloudinaryBackup().catch(e=>toast('Backup failed: '+e.message))">Backup Now</button>
+      <button type="button" class="btn small ghost" onclick="restoreLatestCloudinaryBackup().catch(e=>toast('Restore failed: '+e.message))">Restore Latest</button>
+      <button type="button" class="btn small ghost" onclick="testCloudinaryBackup()">Test Cloudinary</button>
+      <button type="button" class="btn small ghost" onclick="downloadLocalBackup()">Download Local Backup</button>
+    </div>
+    <div class="help-note"><b>Status:</b> ${CLOUDINARY_SYNC_OK?'Connected / working':'Not verified'}${CLOUDINARY_LAST_SYNC?` · Last sync ${Math.round((Date.now()-CLOUDINARY_LAST_SYNC)/1000)}s ago`:''}${CLOUDINARY_LAST_BACKUP?` · Last backup ${new Date(CLOUDINARY_LAST_BACKUP).toLocaleString()}`:''}</div>
+    ${CLOUDINARY_LAST_ERROR?`<div class="help-note" style="border-color:#e7b0ac;color:#8f1e18;"><b>Cloudinary error:</b> ${esc(CLOUDINARY_LAST_ERROR)}</div>`:''}
+    <div class="help-note"><b>Important:</b> <code>${CLOUDINARY_UPLOAD_PRESET}</code> must be an <b>unsigned</b> upload preset that allows <b>RAW</b> uploads and <b>Overwrite</b>. The test button now shows the actual Cloudinary error instead of hiding it.</div>
   </div>
   <div class="admin-card">
     <h3 style="margin-top:0;">Search — Trending Searches</h3>
