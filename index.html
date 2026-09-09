@@ -366,7 +366,6 @@ const SUPABASE_URL = 'https://roiwxjdvethytkgfrpws.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aegiNBzOiCmE2cY6XxNmBQ_IWaeQ1dF';
 const SUPABASE_BUCKET = 'storex-media';
 // Cloud-only persistence: admin data is never stored in the HTML/local browser storage.
-const LOCAL_ADMIN_PERSISTENCE = false;
 const SUPA_SETTING_KEYS = {
   settings:'settings', products:'products', categories:'categories', flashsales:'flashsales',
   banners:'banners', media:'media', pages:'pages'
@@ -457,32 +456,23 @@ async function saveKey(key,val){
   }
 }
 
-async function optimizeImageFile(file,maxSide=1800,quality=.82){
-  if(!file || !file.type.startsWith('image/')) throw new Error('Please select an image file.');
-  const blob=await new Promise((resolve,reject)=>{
-    const img=new Image();
-    const url=URL.createObjectURL(file);
-    img.onload=()=>{
-      URL.revokeObjectURL(url);
-      const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
-      const w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
-      const c=document.createElement('canvas'); c.width=w;c.height=h;
-      const ctx=c.getContext('2d');ctx.drawImage(img,0,0,w,h);
-      c.toBlob(b=>b?resolve(b):reject(new Error('Image optimization failed.')),'image/webp',quality);
-    };
-    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not read image.'));};
-    img.src=url;
-  });
-  return blob;
-}
-
 async function uploadImageToSupabase(file){
+  if(!SUPABASE_READY || !supabaseClient) throw new Error('Supabase is not connected.');
   if(!SUPABASE_ADMIN) throw new Error('Admin login is required to upload images.');
-  const blob=await optimizeImageFile(file);
-  const path='uploads/'+Date.now().toString(36)+'-'+uid()+'.webp';
-  const {error}=await supabaseClient.storage.from(SUPABASE_BUCKET).upload(path,blob,{contentType:'image/webp',upsert:false,cacheControl:'31536000'});
+  if(!file || !file.type.startsWith('image/')) throw new Error('Please select an image file.');
+
+  // Upload the original image exactly as selected. No client-side resizing,
+  // WebP conversion, compression, or optimization is performed.
+  const safeName=(file.name||'image').replace(/[^A-Za-z0-9._-]+/g,'-');
+  const path='uploads/'+Date.now().toString(36)+'-'+uid()+'-'+safeName;
+  const {error}=await supabaseClient.storage.from(SUPABASE_BUCKET).upload(path,file,{
+    contentType:file.type || 'application/octet-stream',
+    upsert:false,
+    cacheControl:'31536000'
+  });
   if(error) throw error;
   const {data}=supabaseClient.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
+  if(!data?.publicUrl) throw new Error('Supabase did not return a public image URL.');
   return data.publicUrl;
 }
 
@@ -491,9 +481,9 @@ async function handleLocalFileInput(input,callback){
   input.disabled=true;
   try{
     const url=await uploadImageToSupabase(file);
-    await rememberMediaUrl(url,file.name||'image.webp');
+    await rememberMediaUrl(url,file.name||'image');
     callback(url);
-    toast('Image optimized and uploaded to Supabase ✓');
+    toast('Original image uploaded to Supabase ✓');
   }catch(e){
     console.error(e); toast('Image upload failed: '+(e.message||'Unknown error'));
   }finally{input.disabled=false; input.value='';}
@@ -543,8 +533,8 @@ function seedCategories(){
 }
 function seedPages(){
   return [
-    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Store.X</h2><p>Store.X helps shoppers discover useful products, trending deals and special offers in one clean storefront.</p><p>Edit this content from the Custom Pages admin control or directly in the HTML source.</p>',status:'published',style:{}},    {id:'page-contact',title:'Contact',slug:'contact',content:'<h2>Contact Store.X</h2><p>Add your contact details, WhatsApp number, email or social links here.</p>',status:'published',style:{}},
-    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>This demo storefront is self-contained and does not send admin changes to a cloud database.</p>',status:'published',style:{}},
+    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Store.X</h2><p>Store.X helps shoppers discover useful products, trending deals and special offers in one clean storefront.</p><p>Edit this content from the Custom Pages admin control.</p>',status:'published',style:{}},    {id:'page-contact',title:'Contact',slug:'contact',content:'<h2>Contact Store.X</h2><p>Add your contact details, WhatsApp number, email or social links here.</p>',status:'published',style:{}},
+    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>Store.X admin changes are stored in Supabase.</p>',status:'published',style:{}},
     {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms & Conditions</h2><p>Store.X is a product discovery storefront. Review each destination before purchasing.</p>',status:'published',style:{}},
     {id:'page-disclaimer',title:'Disclaimer',slug:'disclaimer',content:'<h2>Disclaimer</h2><p>Demo product listings are examples. Replace them with your own products, links and content before publishing.</p>',status:'published',style:{}}
   ];
@@ -632,7 +622,7 @@ function buildDemoConfig(){
   Object.assign(settings,{
     siteName:'Store.X Demo',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
     favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',
-    hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from this HTML file.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from this HTML file.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
+    hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
     footer:{about:'Store.X is a demo product discovery storefront. Replace the demo content with your own.',copyright:'© Store.X — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
     nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},{id:'nav-contact',label:'Contact',url:'#/page/contact'},{id:'nav-privacy',label:'Privacy Policy',url:'#/page/privacy-policy'},{id:'nav-terms',label:'Terms',url:'#/page/terms'}],
@@ -674,18 +664,34 @@ async function boot(){
   window.addEventListener('hashchange', render);
   render();
   applyMediaSizing();
+  initLazyMedia();
 }
 
-function loadKey(key,fallback){
-  // Local browser persistence is disabled. Demo data is only a fallback when cloud data is unavailable.
-  if(!LOCAL_ADMIN_PERSISTENCE) return Promise.resolve(JSON.parse(JSON.stringify(fallback)));
-  return Promise.resolve(localRead(key,fallback));
+function loadLazyBackground(el){
+  if(!el || el.dataset.lazyLoaded==='1') return;
+  const url=el.getAttribute('data-lazy-bg');
+  if(!url) return;
+  el.style.backgroundImage=`url("${url.replace(/"/g,'\\"')}")`;
+  el.dataset.lazyLoaded='1';
+  el.removeAttribute('data-lazy-bg');
 }
-async function saveKey(key,val){
-  if(LOCAL_ADMIN_PERSISTENCE) localWrite(key,val);
-  applyTheme();
-  render();
-  return true;
+
+function initLazyMedia(){
+  const lazyImages=document.querySelectorAll('img[loading="lazy"]');
+  lazyImages.forEach(img=>{ if(!img.getAttribute('src')) img.removeAttribute('loading'); });
+
+  const bgNodes=document.querySelectorAll('[data-lazy-bg]');
+  if(!bgNodes.length) return;
+  if(!('IntersectionObserver' in window)){ bgNodes.forEach(loadLazyBackground); return; }
+  const io=new IntersectionObserver((entries,observer)=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        loadLazyBackground(entry.target);
+        observer.unobserve(entry.target);
+      }
+    });
+  },{rootMargin:'120px 0px'});
+  bgNodes.forEach(el=>io.observe(el));
 }
 
 function applyTheme(){
@@ -784,6 +790,7 @@ function render(){
   initHeroSlider();
   initFlashCarousels();
   initFlashVisuals();
+  initLazyMedia();
 }
 
 /* ================= HEADER / FOOTER ================= */
@@ -973,8 +980,8 @@ function renderHero(){
   const slides = heroSlides();
   const bg = slides.length ? `<div class="hero-bg">${slides.map((s,i)=>`
     <div class="hero-bg-slide ${i===0?'active':''}" data-i="${i}">
-      ${s.desktop?`<div class="hero-bg-desktop" style="background-image:url('${mediaSrc(s.desktop)}')"></div>`:''}
-      ${s.mobile?`<div class="hero-bg-mobile" style="background-image:url('${mediaSrc(s.mobile)}')"></div>`:''}
+      ${s.desktop?`<div class="hero-bg-desktop" data-lazy-bg="${esc(mediaSrc(s.desktop))}"></div>`:''}
+      ${s.mobile?`<div class="hero-bg-mobile" data-lazy-bg="${esc(mediaSrc(s.mobile))}"></div>`:''}
     </div>`).join('')}</div>` : '';
   const btnAlignMap = {left:'flex-start',center:'center',right:'flex-end'};
   const btnStyle = [
@@ -1008,6 +1015,7 @@ function initHeroSlider(){
     slides[idx].classList.remove('active');
     idx = (idx+1) % slides.length;
     slides[idx].classList.add('active');
+    slides[idx].querySelectorAll('[data-lazy-bg]').forEach(loadLazyBackground);
   }, 5000);
 }
 
@@ -1016,9 +1024,9 @@ function flashImages(f){
 }
 function flashVisualHtml(images){
   if(!images.length) return `<div class="flash-visual"></div>`;
-  if(images.length===1) return `<div class="flash-visual" style="background-image:url('${images[0]}')"></div>`;
+  if(images.length===1) return `<div class="flash-visual" data-lazy-bg="${esc(images[0])}"></div>`;
   return `<div class="flash-visual flash-visual-auto" data-images='${esc(JSON.stringify(images))}'>
-    ${images.map((src,i)=>`<div class="flash-visual-slide ${i===0?'active':''}" style="background-image:url('${src}')"></div>`).join('')}
+    ${images.map((src,i)=>`<div class="flash-visual-slide ${i===0?'active':''}" data-lazy-bg="${esc(src)}"></div>`).join('')}
   </div>`;
 }
 let FLASH_VISUAL_TIMERS = [];
@@ -1187,7 +1195,7 @@ function bannerStyle(b){
 function renderBannerSection(sec){
   const b=BANNERS.find(x=>x.id===(sec.config&&sec.config.bannerId)); if(!b||!b.visible)return '';
   const d=Object.assign({headingColor:'#FFFFFF',descriptionColor:'#FFFFFF',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:30,buttonWidth:'',imageFit:'cover'},b.display||{});
-  return `<section class="section container"><a class="promo-banner" href="${esc(b.buttonUrl||'#/')}" style="background-image:url('${mediaSrc(b.desktopImage||b.image)}');${bannerStyle(b)}">
+  return `<section class="section container"><a class="promo-banner" href="${esc(b.buttonUrl||'#/')}" data-lazy-bg="${esc(mediaSrc(b.desktopImage||b.image))}" style="${bannerStyle(b)}">
     <div class="promo-banner-overlay" style="background:rgba(0,0,0,var(--promo-overlay,.25));"></div>
     <div class="promo-banner-inner" style="padding:${Number(d.padding)||30}px;">
       <h3 style="color:${esc(d.headingColor||'#fff')};">${safeRichHtml(b.heading||'')}</h3>
@@ -2389,7 +2397,7 @@ function adminSettings(){
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
     <div class="help-note"><b>Cloud mode:</b> Admin changes are stored in Supabase and are available to other visitors.</div>
-    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Supabase. Realtime updates refresh other open storefronts automatically.</div><div class="help-note"><b>Source configuration:</b> The HTML contains safe demo fallback content. Supabase is the persistent source of truth for published admin changes.</div>
+    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Supabase. Realtime updates refresh other open storefronts automatically.</div><div class="help-note"><b>Source configuration:</b> Supabase is the persistent source of truth for published admin changes; built-in demo data is used only when a cloud record does not exist.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
