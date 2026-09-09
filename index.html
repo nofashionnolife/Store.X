@@ -9,6 +9,7 @@
 <link id="site-apple-icon" rel="apple-touch-icon" href="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --primary:#F57224;
@@ -335,14 +336,13 @@ img{max-width:100%;display:block;}
 /* ============================================================
    Store.X — self-contained HTML configuration
    ============================================================
-   No cloud backup, Supabase, API, or remote state-sync is used.
-   The values in DEMO_CONFIG below are the source of truth for this file.
+   Supabase is the persistent cloud source of truth for admin changes.
+   The values below are safe demo fallbacks when Supabase has no saved data yet.
    Admin edits update the storefront immediately in this open page.
    To make an edit permanent for every visitor, edit DEMO_CONFIG in this
    HTML file and publish/deploy the updated HTML.
    ============================================================ */
 
-const LOCAL_ADMIN_PERSISTENCE = false; // false = HTML configuration is authoritative
 // ---------- Runtime/UI state ----------
 let SETTINGS=null, PRODUCTS=[], CATEGORIES=[], FLASHSALES=[], BANNERS=[], MEDIA=[], PAGES=[];
 let MOBILE_DRAWER_OPEN=false, MOBILE_SEARCH_OPEN=false;
@@ -359,34 +359,146 @@ function fmtMoney(value){ const n=Number(value); if(!Number.isFinite(n)) return 
 
 const LOCAL_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 
-function localRead(key,fallback){
-  if(!LOCAL_ADMIN_PERSISTENCE) return fallback;
-  try{const r=localStorage.getItem(key);return r?JSON.parse(r):fallback;}catch(_){return fallback;}
-}
-function localWrite(key,val){
-  if(!LOCAL_ADMIN_PERSISTENCE) return;
-  try{localStorage.setItem(key,JSON.stringify(val));}catch(_){}
-}
 
 /* ---------- Local image handling ---------- */
-function handleLocalFileInput(input,callback){
-  const file=input.files&&input.files[0]; if(!file)return;
-  if(file.size>LOCAL_IMAGE_MAX_BYTES){toast('Image is too large. Use an image under 4 MB.');return;}
-  input.disabled=true;
-  const reader=new FileReader();
-  reader.onload=()=>{
-    try{
-      const dataUrl=String(reader.result||'');
-      if(!dataUrl.startsWith('data:image/')) throw new Error('Unsupported image file');
-      rememberMediaUrl(dataUrl);
-      callback(dataUrl);
-      toast('Image loaded into this HTML session ✓');
-    }catch(e){toast('Image could not be loaded: '+e.message);}
-    finally{input.disabled=false;}
-  };
-  reader.onerror=()=>{input.disabled=false;toast('Could not read the image file.');};
-  reader.readAsDataURL(file);
+/* ---------- Supabase cloud persistence ---------- */
+const SUPABASE_URL = 'https://roiwxjdvethytkgfrpws.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aegiNBzOiCmE2cY6XxNmBQ_IWaeQ1dF';
+const SUPABASE_BUCKET = 'storex-media';
+// Cloud-only persistence: admin data is never stored in the HTML/local browser storage.
+const LOCAL_ADMIN_PERSISTENCE = false;
+const SUPA_SETTING_KEYS = {
+  settings:'settings', products:'products', categories:'categories', flashsales:'flashsales',
+  banners:'banners', media:'media', pages:'pages'
+};
+let supabaseClient = null;
+let SUPABASE_READY = false;
+let SUPABASE_ADMIN = false;
+let SUPABASE_SYNC_CHANNEL = null;
+
+async function initSupabase(){
+  if(!window.supabase || typeof window.supabase.createClient!=='function') throw new Error('Supabase library could not load.');
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+  });
+  SUPABASE_READY = true;
+  const {data:{session}} = await supabaseClient.auth.getSession();
+  if(session) await refreshAdminStatus();
+  supabaseClient.auth.onAuthStateChange((_event, session)=>{
+    setTimeout(async()=>{
+      if(session) await refreshAdminStatus(); else {SUPABASE_ADMIN=false;ADMIN_UNLOCKED=false;}
+      if(route().startsWith('/admin-of-storex')) render();
+    },0);
+  });
+  subscribeRealtime();
 }
+
+async function refreshAdminStatus(){
+  SUPABASE_ADMIN=false;
+  if(!supabaseClient) return false;
+  const {data:{user}}=await supabaseClient.auth.getUser();
+  if(!user) return false;
+  const {data,error}=await supabaseClient.from('sx_admins').select('user_id').eq('user_id',user.id).maybeSingle();
+  if(error) throw error;
+  SUPABASE_ADMIN=!!data;
+  ADMIN_UNLOCKED=SUPABASE_ADMIN;
+  return SUPABASE_ADMIN;
+}
+
+function subscribeRealtime(){
+  if(!supabaseClient) return;
+  try{
+    SUPABASE_SYNC_CHANNEL = supabaseClient.channel('storex-live-sync')
+      .on('postgres_changes',{event:'*',schema:'public',table:'sx_settings'},payload=>{
+        const row=payload.new||payload.old;
+        if(!row || !row.key) return;
+        applyRemoteSetting(row.key,row.value).catch(()=>{});
+      }).subscribe();
+  }catch(_){ /* storefront still works with normal fetches */ }
+}
+
+async function applyRemoteSetting(key,value){
+  const map={settings:'SETTINGS',products:'PRODUCTS',categories:'CATEGORIES',flashsales:'FLASHSALES',banners:'BANNERS',media:'MEDIA',pages:'PAGES'};
+  const target=map[key];
+  if(!target) return;
+  const clone=JSON.parse(JSON.stringify(value));
+  if(target==='SETTINGS') SETTINGS=Object.assign({},DEFAULT_SETTINGS,clone,{hero:Object.assign({},DEFAULT_SETTINGS.hero,clone.hero||{}),footer:Object.assign({},DEFAULT_SETTINGS.footer,clone.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(clone.footer&&clone.footer.social)||{})}),search:Object.assign({},DEFAULT_SETTINGS.search,clone.search||{}),darazPromo:Object.assign({},DEFAULT_SETTINGS.darazPromo,clone.darazPromo||{}),mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,clone.mediaSizing||{})});
+  else window[target]=clone;
+  applyTheme();
+  if(!route().startsWith('/admin-of-storex')) render();
+}
+
+async function loadKey(key,fallback){
+  if(!SUPABASE_READY) return JSON.parse(JSON.stringify(fallback));
+  try{
+    const cloudKey=SUPA_SETTING_KEYS[key.replace('storex-','').replace('-v2','')]||key;
+    const {data,error}=await supabaseClient.from('sx_settings').select('value').eq('key',cloudKey).maybeSingle();
+    if(error) throw error;
+    return data && data.value!=null ? JSON.parse(JSON.stringify(data.value)) : JSON.parse(JSON.stringify(fallback));
+  }catch(e){
+    console.warn('Store.X cloud read failed for',key,e);
+    return JSON.parse(JSON.stringify(fallback));
+  }
+}
+
+async function saveKey(key,val){
+  if(!SUPABASE_READY){ toast('Supabase is not connected. Change was not saved.'); return false; }
+  if(!SUPABASE_ADMIN){ toast('Admin session required. Please log in again.'); return false; }
+  const cloudKey=SUPA_SETTING_KEYS[key.replace('storex-','').replace('-v2','')]||key;
+  try{
+    const {error}=await supabaseClient.from('sx_settings').upsert({key:cloudKey,value:JSON.parse(JSON.stringify(val)),updated_at:new Date().toISOString()},{onConflict:'key'});
+    if(error) throw error;
+    applyTheme(); render();
+    return true;
+  }catch(e){
+    console.error('Store.X cloud save failed:',e);
+    toast('Cloud save failed: '+(e.message||'Unknown Supabase error'));
+    return false;
+  }
+}
+
+async function optimizeImageFile(file,maxSide=1800,quality=.82){
+  if(!file || !file.type.startsWith('image/')) throw new Error('Please select an image file.');
+  const blob=await new Promise((resolve,reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
+      const c=document.createElement('canvas'); c.width=w;c.height=h;
+      const ctx=c.getContext('2d');ctx.drawImage(img,0,0,w,h);
+      c.toBlob(b=>b?resolve(b):reject(new Error('Image optimization failed.')),'image/webp',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Could not read image.'));};
+    img.src=url;
+  });
+  return blob;
+}
+
+async function uploadImageToSupabase(file){
+  if(!SUPABASE_ADMIN) throw new Error('Admin login is required to upload images.');
+  const blob=await optimizeImageFile(file);
+  const path='uploads/'+Date.now().toString(36)+'-'+uid()+'.webp';
+  const {error}=await supabaseClient.storage.from(SUPABASE_BUCKET).upload(path,blob,{contentType:'image/webp',upsert:false,cacheControl:'31536000'});
+  if(error) throw error;
+  const {data}=supabaseClient.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+async function handleLocalFileInput(input,callback){
+  const file=input.files&&input.files[0]; if(!file)return;
+  input.disabled=true;
+  try{
+    const url=await uploadImageToSupabase(file);
+    await rememberMediaUrl(url,file.name||'image.webp');
+    callback(url);
+    toast('Image optimized and uploaded to Supabase ✓');
+  }catch(e){
+    console.error(e); toast('Image upload failed: '+(e.message||'Unknown error'));
+  }finally{input.disabled=false; input.value='';}
+}
+
 async function handleImageUrlInput(input,callback){
   const url=(input.value||'').trim(); if(!url)return;
   if(!isValidHttpUrl(url) && !url.startsWith('data:image/')){toast('Please enter a valid http(s) image URL');return;}
@@ -404,14 +516,15 @@ async function processImageField(input,getTarget,prop,previewId){
   await rememberMediaUrl(url);
   toast('Image URL saved ✓');
 }
-async function rememberMediaUrl(url){
+async function rememberMediaUrl(url,name){
   if(!url)return;
-  if(!MEDIA.some(m=>m.dataUrl===url || m.name===url)){
-    MEDIA.push({id:uid(),name:url,dataUrl:url});
+  if(!Array.isArray(MEDIA))MEDIA=[];
+  if(!MEDIA.some(m=>m.dataUrl===url || m.name===url || m.publicUrl===url)){
+    MEDIA.push({id:uid(),name:name||url,dataUrl:url,publicUrl:url});
     await saveKey(KEYS.media,MEDIA);
   }
 }
-function mediaSrc(id){ if(!id)return ''; const m=MEDIA.find(x=>x.id===id); return m ? m.dataUrl : (typeof id==='string'&&(id.startsWith('data:')||id.startsWith('http'))?id:''); }
+function mediaSrc(id){ if(!id)return ''; const m=MEDIA.find(x=>x.id===id); return m ? (m.publicUrl||m.dataUrl||'') : (typeof id==='string'&&(id.startsWith('data:')||id.startsWith('http'))?id:''); }
 
 function demoImage(label,bg='#F2F0EB',fg='#1F2328'){
   const safe=String(label).replace(/[&<>"]/g,'');
@@ -441,7 +554,7 @@ function seedPages(){
 // Change these values directly in this HTML file when you want
 // permanent content/design changes in the published storefront.
 // The Admin Panel below exposes the same areas for live editing
-// while this file is open. No Cloudinary/Supabase/backend is used.
+// while this file is open. Supabase is used for persistent cloud storage.
 // ============================================================
 const KEYS = {
   settings:'storex-settings-v2',
@@ -457,7 +570,7 @@ const DEFAULT_SETTINGS = {
   siteName:'Store.X',
   logo:'', logoLink:'#/', logoWidth:150,
   primaryColor:'#F57224', headerBg:'#FFFFFF', headerText:'#1F2328',
-  favicon:'', gaId:'', adminPass:'storex-admin', darazStoreUrl:'',
+  favicon:'', gaId:'', darazStoreUrl:'',
   hero:{
     enabled:true, image:'', desktopImage:'', mobileImage:'',
     title:'Shop the Deals', subtitle:'Discover great products and deals.',
@@ -518,7 +631,7 @@ function buildDemoConfig(){
   const settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   Object.assign(settings,{
     siteName:'Store.X Demo',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
-    favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',adminPass:'storex-admin',
+    favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',
     hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from this HTML file.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from this HTML file.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
     footer:{about:'Store.X is a demo product discovery storefront. Replace the demo content with your own.',copyright:'© Store.X — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
@@ -537,9 +650,8 @@ function buildDemoConfig(){
   return {settings,products,categories:seedCategories(),flashsales:[flash],banners:[banner],media,pages:seedPages()};
 }
 async function boot(){
-  // DEMO_CONFIG is regenerated from the editable source builder for a clean
-  // deterministic offline start. No old localStorage state is trusted.
   const demo=buildDemoConfig();
+  try{ await initSupabase(); }catch(e){ console.error('Supabase initialization failed:',e); toast('Supabase connection failed. Store.X is running in safe demo mode; admin saves are disabled.'); }
 
   SETTINGS = await loadKey(KEYS.settings, demo.settings);
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, SETTINGS, {
@@ -565,10 +677,7 @@ async function boot(){
 }
 
 function loadKey(key,fallback){
-  // HTML-source mode is authoritative. Never read old localStorage data because
-  // stale data from an earlier Store.X build can be missing required fields and
-  // cause a blank storefront. A deep clone also prevents accidental mutation of
-  // the demo source configuration.
+  // Local browser persistence is disabled. Demo data is only a fallback when cloud data is unavailable.
   if(!LOCAL_ADMIN_PERSISTENCE) return Promise.resolve(JSON.parse(JSON.stringify(fallback)));
   return Promise.resolve(localRead(key,fallback));
 }
@@ -776,18 +885,20 @@ function renderMobileDrawer(){
     {label:'Home',url:'#/'},
     {label:'All Products',url:'#/category/all'},
     {label:'Flash Sale',url:'#/flash-sale'},
-    ...CATEGORIES.filter(c=>c.status!=='hidden').slice(0,12).map(c=>({label:c.name,url:'#/category/'+c.slug})),
     ...PAGES.filter(p=>p.status==='published' && p.slug!=='about').slice(0,12).map(p=>({label:p.title,url:'#/page/'+p.slug}))
   ];
   const merged=[...configured,...built].filter(x=>x&&x.label&&x.url);
   const seen=new Set();
   const navLinks=merged.filter(n=>{const k=String(n.url)+'|'+String(n.label);if(seen.has(k))return false;seen.add(k);return true;})
     .map(n=>`<a href="${esc(n.url)}" ${n.newTab?'target="_blank" rel="noopener"':''} onclick="MOBILE_DRAWER_OPEN=false;">${esc(n.label)}</a>`).join('');
+  const cats=CATEGORIES.filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0));
+  const categoryMenu=cats.length?`<details class="mobile-category-group"><summary>All Categories <span>⌄</span></summary><div>${cats.map(c=>`<a href="#/category/${esc(c.slug)}" onclick="MOBILE_DRAWER_OPEN=false;">${esc(c.name)}</a>`).join('')}</div></details>`:'';
   return `<div class="mobile-drawer open" onclick="if(event.target===this){MOBILE_DRAWER_OPEN=false;render();}">
     <div class="mobile-drawer-panel">
       <button class="mobile-drawer-close" onclick="MOBILE_DRAWER_OPEN=false;render();">&times;</button>
       <div style="clear:both;height:8px;"></div>
       ${navLinks}
+      ${categoryMenu}
     </div>
   </div>`;
 }
@@ -1303,13 +1414,30 @@ function renderAdminRoot(){
   </div>`;
 }
 
+async function supabaseAdminLogin(form){
+  if(!supabaseClient){toast('Supabase is not available.');return;}
+  const fd=new FormData(form),email=String(fd.get('email')||'').trim(),password=String(fd.get('password')||'');
+  try{
+    const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+    if(error) throw error;
+    const ok=await refreshAdminStatus();
+    if(!ok){ await supabaseClient.auth.signOut(); throw new Error('This account is authenticated but is not listed as a Store.X admin.'); }
+    toast('Admin signed in ✓'); render();
+  }catch(e){toast('Admin login failed: '+(e.message||'Invalid credentials'));}
+}
+async function supabaseAdminLogout(){
+  try{if(supabaseClient) await supabaseClient.auth.signOut();}catch(e){console.warn(e);}
+  SUPABASE_ADMIN=false;ADMIN_UNLOCKED=false;render();
+}
+
 function renderAdminLogin(){
   return `<div class="login-shell"><div class="login-card">
     <div style="font-family:'Space Grotesk';font-weight:700;font-size:22px;margin-bottom:4px;">Store<span style="color:var(--primary);">.X</span> admin</div>
-    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Enter the admin passcode to continue.</p>
-    <form onsubmit="event.preventDefault(); if(this.pass.value===SETTINGS.adminPass){ADMIN_UNLOCKED=true;render();}else{toast('Incorrect passcode');}">
-      <div class="field"><label>Passcode</label><input type="password" name="pass" autofocus></div>
-      <button class="btn" style="width:100%;justify-content:center;margin-top:12px;" type="submit">Unlock Admin</button>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">Sign in with your Supabase admin account.</p>
+    <form onsubmit="event.preventDefault();supabaseAdminLogin(this);">
+      <div class="field"><label>Admin Email</label><input type="email" name="email" autocomplete="username" required autofocus></div>
+      <div class="field"><label>Password</label><input type="password" name="password" autocomplete="current-password" required></div>
+      <button class="btn" style="width:100%;justify-content:center;margin-top:12px;" type="submit">Sign In</button>
     </form>
     <a href="#/" style="display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--ink-soft);">&larr; Back to storefront</a>
   </div></div>`;
@@ -1320,7 +1448,7 @@ function setAdminView(v){ ADMIN_VIEW=v; ADMIN_DRAWER_OPEN=false; render(); }
 function renderAdminSidebar(){
   const item = (v,label)=>`<button class="navlink ${ADMIN_VIEW===v?'active':''}" onclick="setAdminView('${v}')">${label}</button>`;
   return `<div class="admin-sidebar ${ADMIN_DRAWER_OPEN?'open':''}">
-    <div class="brand">Store<span class="x">.X</span> admin</div>
+    <div class="brand">Store<span class="x">.X</span> admin</div><div class="help-note" style="margin:8px 0 12px;font-size:11px;">☁ Supabase cloud sync enabled</div>
     ${item('dashboard','Dashboard')}
     <div class="group-label">Catalog</div>
     ${item('products','Products')}
@@ -1337,7 +1465,7 @@ function renderAdminSidebar(){
     ${item('settings','Settings')}
     <div class="group-label">&nbsp;</div>
     <a href="#/" class="navlink" onclick="ADMIN_DRAWER_OPEN=false;">\u2190 View storefront</a>
-    <button class="navlink" onclick="ADMIN_DRAWER_OPEN=false;ADMIN_UNLOCKED=false;render();">Log out</button>
+    <button class="navlink" onclick="ADMIN_DRAWER_OPEN=false;supabaseAdminLogout();">Log out</button>
   </div>`;
 }
 
@@ -2260,14 +2388,13 @@ function adminSettings(){
   const s=SETTINGS;
   return `<div class="admin-topbar"><h1>General Settings</h1></div>
   <div class="admin-card">
-    <div class="help-note"><b>Self-contained mode:</b> Images and settings stay inside this HTML page. No cloud backup or remote database is used.</div>
-    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Local HTML as shared JSON state. Already-open storefronts check Local HTML every 5 seconds and refresh automatically when the state changes.</div><div class="help-note"><b>Source configuration:</b> The demo content is embedded directly in this HTML. There are no API keys or cloud backup requirements.</div>
+    <div class="help-note"><b>Cloud mode:</b> Admin changes are stored in Supabase and are available to other visitors.</div>
+    <div class="help-note"><b>Cloud data sync:</b> Every admin save (products, categories, flash sales, banners, homepage, theme, navigation, media, pages and settings) is written to Supabase. Realtime updates refresh other open storefronts automatically.</div><div class="help-note"><b>Source configuration:</b> The HTML contains safe demo fallback content. Supabase is the persistent source of truth for published admin changes.</div>
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
         <div class="field"><label>Daraz Store URL</label><input type="url" name="darazStoreUrl" value="${esc(s.darazStoreUrl)}"></div>
         <div class="field"><label>Google Analytics ID</label><input type="text" name="gaId" value="${esc(s.gaId)}"></div>
-        <div class="field"><label>Admin Passcode</label><input type="text" name="adminPass" value="${esc(s.adminPass)}"></div>
         <div class="field full"><label>Footer About Text</label><textarea name="footerAbout">${esc(s.footer.about)}</textarea></div>
         <div class="field full"><label>Footer Copyright</label><input type="text" name="footerCopyright" value="${esc(s.footer.copyright)}"></div>
       </div>
@@ -2291,7 +2418,6 @@ function saveGeneralSettings(form){
   SETTINGS.siteName=fd.get('siteName').trim();
   SETTINGS.darazStoreUrl=fd.get('darazStoreUrl').trim();
   SETTINGS.gaId=fd.get('gaId').trim();
-  SETTINGS.adminPass=fd.get('adminPass').trim()||'storex-admin';
   SETTINGS.footer.about=fd.get('footerAbout').trim();
   SETTINGS.footer.copyright=fd.get('footerCopyright').trim();
   saveKey(KEYS.settings,SETTINGS);toast('Settings saved');
