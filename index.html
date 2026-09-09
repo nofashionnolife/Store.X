@@ -324,16 +324,6 @@ img{max-width:100%;display:block;}
   .admin-sidebar .group-label{display:block;}
   .admin-main{padding:70px 16px 26px;}
 }
-
-/* ===== Store.X Pakistan retail checkout upgrade ===== */
-.auth-link,.cart-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:8px 10px;font-size:12px;font-weight:700;white-space:nowrap}
-.auth-link:hover,.cart-link:hover{border-color:var(--primary);color:var(--primary)}
-.cart-count{min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:var(--primary);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center}
-.customer-shell{min-height:calc(100vh - 100px);padding:30px 20px;background:#f7f6f3}.customer-card{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(20,20,20,.06);padding:24px;max-width:760px;margin:0 auto}.customer-card.narrow{max-width:470px}.customer-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}.customer-head h1{font-size:24px;margin:0}.x-close{border:0;background:#f2f0eb;border-radius:50%;width:36px;height:36px;font-size:24px;line-height:1;color:#5b616b}.auth-tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:18px}.auth-tabs a{flex:1;text-align:center;padding:10px;font-weight:700;color:var(--ink-soft)}.auth-tabs a.active{color:var(--primary);border-bottom:2px solid var(--primary)}.form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field-hint{font-size:11.5px;color:var(--ink-soft);margin-top:5px}.address-card{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0;background:#fff}.address-card.default{border-color:var(--primary);box-shadow:0 0 0 1px rgba(245,114,36,.1)}.cart-row{display:grid;grid-template-columns:72px 1fr auto auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}.cart-row img{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#f2f0eb}.qty-control{display:flex;align-items:center;border:1px solid var(--line);border-radius:7px;overflow:hidden}.qty-control button{border:0;background:#fff;width:30px;height:30px}.qty-control span{min-width:30px;text-align:center;font-size:13px}.checkout-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,.8fr);gap:20px}.summary-box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;position:sticky;top:100px}.summary-line{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:13px}.summary-total{font-size:18px;font-weight:800;border-top:1px solid var(--line);margin-top:8px;padding-top:12px}.status-track{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:18px 0}.status-step{text-align:center;font-size:10px;color:#92979d}.status-step .dot{width:22px;height:22px;border-radius:50%;background:#e5e2dc;margin:0 auto 6px}.status-step.active{color:var(--primary);font-weight:700}.status-step.active .dot{background:var(--primary)}.order-list{display:grid;gap:10px}.order-card{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}.order-meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}.status-badge{display:inline-flex;padding:4px 9px;border-radius:999px;background:#f2f0eb;font-size:11px;font-weight:800}.status-badge.pending{background:#fff4ea;color:#a64c10}.status-badge.confirmed{background:#eaf6ff;color:#17658a}.status-badge.shipped{background:#efeaff;color:#5d43a4}.status-badge.delivered{background:#e9f7ee;color:#1a7f37}.status-badge.cancelled{background:#fdecec;color:#b42318}.secure-note{background:#f7f8fa;border:1px solid #e2e5e9;border-radius:9px;padding:10px 12px;font-size:11.5px;color:#5b616b}.admin-order-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.order-detail-print{background:#fff;color:#111;padding:22px;width:100%;max-width:760px;margin:auto}.print-brand{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.qr-box{width:120px;height:120px;display:grid;place-items:center}.tcs-mark{font-weight:900;letter-spacing:1px;color:#c8102e;border:2px solid #c8102e;padding:4px 9px;border-radius:4px;display:inline-block}.hidden-customer{display:none!important}
-@media(max-width:800px){.header-row{grid-template-columns:auto 1fr auto auto}.main-nav{display:none}.form-grid-2,.checkout-grid,.admin-order-grid{grid-template-columns:1fr}.summary-box{position:static}.cart-row{grid-template-columns:58px 1fr auto}.cart-row .qty-control{grid-column:2}.status-track{grid-template-columns:repeat(5,minmax(48px,1fr));overflow:auto}.auth-link{font-size:11px;padding:7px}.cart-link{font-size:11px;padding:7px}}
-@media print{body>*:not(#print-root){display:none!important}#print-root{display:block!important}.order-detail-print{box-shadow:none;border:0;margin:0;width:100%}}
-#app{min-height:40vh}
-
 </style>
 </head>
 <body>
@@ -417,24 +407,33 @@ async function refreshAdminStatus(){
 function subscribeRealtime(){
   if(!supabaseClient) return;
   try{
-    SUPABASE_SYNC_CHANNEL = supabaseClient.channel('storex-live-sync')
+    if(SUPABASE_SYNC_CHANNEL){ try{ supabaseClient.removeChannel(SUPABASE_SYNC_CHANNEL); }catch(_){} SUPABASE_SYNC_CHANNEL=null; }
+    SUPABASE_SYNC_CHANNEL = supabaseClient.channel('storex-live-sync-'+Math.random().toString(36).slice(2))
       .on('postgres_changes',{event:'*',schema:'public',table:'sx_settings'},payload=>{
         const row=payload.new||payload.old;
         if(!row || !row.key) return;
-        applyRemoteSetting(row.key,row.value).catch(()=>{});
+        applyRemoteSetting(row.key,row.value).catch(err=>console.warn('Realtime update ignored:',err));
       }).subscribe();
-  }catch(_){ /* storefront still works with normal fetches */ }
+  }catch(err){ console.warn('Store.X realtime unavailable; normal cloud reads remain available.',err); }
 }
 
 async function applyRemoteSetting(key,value){
   const map={settings:'SETTINGS',products:'PRODUCTS',categories:'CATEGORIES',flashsales:'FLASHSALES',banners:'BANNERS',media:'MEDIA',pages:'PAGES'};
   const target=map[key];
-  if(!target) return;
-  const clone=JSON.parse(JSON.stringify(value));
-  if(target==='SETTINGS') SETTINGS=Object.assign({},DEFAULT_SETTINGS,clone,{hero:Object.assign({},DEFAULT_SETTINGS.hero,clone.hero||{}),footer:Object.assign({},DEFAULT_SETTINGS.footer,clone.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(clone.footer&&clone.footer.social)||{})}),search:Object.assign({},DEFAULT_SETTINGS.search,clone.search||{}),darazPromo:Object.assign({},DEFAULT_SETTINGS.darazPromo,clone.darazPromo||{}),mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,clone.mediaSizing||{})});
-  else window[target]=clone;
-  applyTheme();
-  if(!route().startsWith('/admin-of-storex')) render();
+  if(!target || value==null) return;
+  try{
+    const clone=JSON.parse(JSON.stringify(value));
+    if(target==='SETTINGS'){
+      if(!clone || typeof clone!=='object' || Array.isArray(clone)) return;
+      SETTINGS=Object.assign({},DEFAULT_SETTINGS,clone,{hero:Object.assign({},DEFAULT_SETTINGS.hero,clone.hero||{}),footer:Object.assign({},DEFAULT_SETTINGS.footer,clone.footer||{},{social:Object.assign({},DEFAULT_SETTINGS.footer.social,(clone.footer&&clone.footer.social)||{})}),search:Object.assign({},DEFAULT_SETTINGS.search,clone.search||{}),darazPromo:Object.assign({},DEFAULT_SETTINGS.darazPromo,clone.darazPromo||{}),mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,clone.mediaSizing||{})});
+    }else{
+      if(!Array.isArray(clone)) return;
+      window[target]=clone;
+    }
+    normalizeCloudState();
+    applyTheme();
+    if(!route().startsWith('/admin-of-storex')) render();
+  }catch(err){ console.warn('Ignored malformed Store.X realtime payload:',key,err); }
 }
 
 async function loadKey(key,fallback){
@@ -581,7 +580,7 @@ const DEFAULT_SETTINGS = {
     buttonPaddingY:12, buttonPaddingX:22, buttonMarginTop:0, buttonWidth:'', buttonAlign:'left'
   },
   footer:{about:'Store.X is a product discovery site.',copyright:'© Store.X',social:{}},
-  darazPromo:{enabled:false},
+  darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
   search:{trending:[],maxSuggestions:10,letterSuggestions:{}},
   nav:[], sections:[],
   mediaSizing:{categoryHeight:130,productRatio:'1/1',flashHeight:360,promoHeight:260}
@@ -610,7 +609,7 @@ function buildDemoConfig(){
     id,title,shortTitle:title,shortDesc:desc,fullDesc:desc+'. Demo listing — replace this with your real product details.',
     images:[img],mainImage:img,darazUrl:'https://www.daraz.pk/',category:cat,tags:title.toLowerCase().split(' ').concat(['demo','deal']),
     price,oldPrice,discount,badge:discount?'-'+discount+'%':'',sku:'DEMO-'+id,status:'published',featured:!!flags.featured,trending:!!flags.trending,
-    newArrival:!!flags.newArrival,bestSeller:!!flags.bestSeller,order:flags.order||1,stock:flags.stock??20,deliveryCharge:flags.deliveryCharge??250,delivery:{weight:flags.weight||'0.5 kg',dimensions:flags.dimensions||'20 × 15 × 8 cm',fragile:!!flags.fragile,liquid:!!flags.liquid,flammable:!!flags.flammable},
+    newArrival:!!flags.newArrival,bestSeller:!!flags.bestSeller,order:flags.order||1,
     seo:{slug:slugify(title),title:title+' | Store.X',description:desc,keywords:title.toLowerCase()},clicks:0,views:0
   });
   const products=[
@@ -636,13 +635,14 @@ function buildDemoConfig(){
     footer:{about:'Store.X is a demo product discovery storefront. Replace the demo content with your own.',copyright:'© Store.X — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
     nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},{id:'nav-contact',label:'Contact',url:'#/page/contact'},{id:'nav-privacy',label:'Privacy Policy',url:'#/page/privacy-policy'},{id:'nav-terms',label:'Terms',url:'#/page/terms'}],
-    darazPromo:{enabled:false,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
+    darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
     sections:[
       {id:'sec-hero',type:'hero',visible:true,title:'Hero'},
       {id:'sec-cats',type:'categories',visible:true,title:'Shop by Category',subtitle:'Browse popular departments'},
       {id:'sec-products',type:'productCollection',visible:true,title:'Featured Deals',subtitle:'Hand-picked demo products',config:{filter:'featured',count:6,layout:'grid',columns:3,productId:''}},
       {id:'sec-flash',type:'flashsale',visible:true,title:'Flash Sale',subtitle:'Limited-time demo offers',config:{flashSaleId:'flash-demo'}},
       {id:'sec-banner',type:'banner',visible:true,title:'Promo Banner',subtitle:'',config:{bannerId:'banner-demo'}},
+      {id:'sec-daraz',type:'darazPromo',visible:true,title:'Daraz Store Strip',subtitle:''},
       {id:'sec-trending',type:'productCollection',visible:true,title:'Trending Now',subtitle:'Popular demo picks',config:{filter:'trending',count:6,layout:'grid',columns:3,productId:''}}
     ]
   });
@@ -773,34 +773,60 @@ function showModal(contentHtml){
 /* ================= ROUTER ================= */
 function route(){ return location.hash.replace(/^#/,'') || '/'; }
 
-function render(){
-  const h = route();
-  const app = document.getElementById('app');
-  if(h.startsWith('/admin-of-storex')){
-    app.innerHTML = renderAdminRoot();
-    wireAdminEvents();
-    return;
-  }
-  let body='';
-  resetDefaultSEO();
-  if(h==='/' || h===''){ body = renderHome(); }
-  else if(h.startsWith('/product/')){ body = renderProductPage(decodeURIComponent(h.split('/product/')[1])); }
-  else if(h.startsWith('/category/')){ body = renderCategoryPage(decodeURIComponent(h.split('/category/')[1])); }
-  else if(h.startsWith('/flash-sale/')){ body = renderFlashSalePage(decodeURIComponent(h.split('/flash-sale/')[1])); }
-  else if(h==='/flash-sale'){ body = renderFlashSaleIndex(); }
-  else if(h.startsWith('/search')){ const q = new URLSearchParams(h.split('?')[1]||'').get('q')||''; body = renderSearchPage(q); }
-  else if(h.startsWith('/page/')){ body = renderCustomPage(decodeURIComponent(h.split('/page/')[1])); }
-  else { body = renderNotFound(); }
-
-  app.innerHTML = renderHeader() + '<main>'+body+'</main>' + renderFooter() + renderMobileDrawer();
-  window.scrollTo(0,0);
-  wireStorefrontEvents();
-  startCountdowns();
-  initHeroSlider();
-  initFlashCarousels();
-  initFlashVisuals();
-  initLazyMedia();
+let STOREX_RENDERING=false;
+function normalizeCloudState(){
+  if(!Array.isArray(PRODUCTS)) PRODUCTS=[];
+  if(!Array.isArray(CATEGORIES)) CATEGORIES=[];
+  if(!Array.isArray(FLASHSALES)) FLASHSALES=[];
+  if(!Array.isArray(BANNERS)) BANNERS=[];
+  if(!Array.isArray(MEDIA)) MEDIA=[];
+  if(!Array.isArray(PAGES)) PAGES=[];
+  if(!SETTINGS || typeof SETTINGS!=='object' || Array.isArray(SETTINGS)) SETTINGS={};
+  SETTINGS.search=SETTINGS.search&&typeof SETTINGS.search==='object'?SETTINGS.search:{};
 }
+function safeRenderFallback(message){
+  const app=document.getElementById('app');
+  if(!app) return;
+  app.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center"><div><h2 style="margin:0 0 8px">Store.X is recovering</h2><p style="margin:0;color:#666">'+esc(message||'A temporary page error occurred.')+'</p><button class="btn" style="margin-top:16px" onclick="window.StoreXRecover()">Reload storefront</button></div></div>';
+}
+function render(){
+  if(STOREX_RENDERING) return;
+  STOREX_RENDERING=true;
+  try{
+    normalizeCloudState();
+    const h = route();
+    const app = document.getElementById('app');
+    if(!app) throw new Error('Store.X app container is missing.');
+    if(h.startsWith('/admin-of-storex')){
+      app.innerHTML = renderAdminRoot();
+      wireAdminEvents();
+      return;
+    }
+    let body='';
+    resetDefaultSEO();
+    if(h==='/' || h===''){ body = renderHome(); }
+    else if(h.startsWith('/product/')){ body = renderProductPage(decodeURIComponent(h.split('/product/')[1])); }
+    else if(h.startsWith('/category/')){ body = renderCategoryPage(decodeURIComponent(h.split('/category/')[1])); }
+    else if(h.startsWith('/flash-sale/')){ body = renderFlashSalePage(decodeURIComponent(h.split('/flash-sale/')[1])); }
+    else if(h==='/flash-sale'){ body = renderFlashSaleIndex(); }
+    else if(h.startsWith('/search')){ const q = new URLSearchParams(h.split('?')[1]||'').get('q')||''; body = renderSearchPage(q); }
+    else if(h.startsWith('/page/')){ body = renderCustomPage(decodeURIComponent(h.split('/page/')[1])); }
+    else { body = renderNotFound(); }
+    app.innerHTML = renderHeader() + '<main>'+body+'</main>' + renderFooter() + renderMobileDrawer();
+    wireStorefrontEvents();
+    startCountdowns();
+    initHeroSlider();
+    initFlashCarousels();
+    initFlashVisuals();
+    initLazyMedia();
+  }catch(err){
+    console.error('Store.X render error:',err);
+    safeRenderFallback('The storefront hit a temporary rendering error. Your cloud data was not deleted.');
+  }finally{
+    STOREX_RENDERING=false;
+  }
+}
+window.StoreXRecover=function(){ location.reload(); };
 
 /* ================= HEADER / FOOTER ================= */
 function getSearchCorpus(){
@@ -2442,155 +2468,28 @@ function saveGeneralSettings(form){
 
 function wireAdminEvents(){}
 
-
-/* ============================================================
-   STORE.X RETAIL E-COMMERCE UPGRADE
-   Customer auth, Pakistan addresses, cart, checkout, orders,
-   cancellation, live status, admin order management and print labels.
-   ============================================================ */
-const SX_PROVINCES={
-  Punjab:['Lahore','Faisalabad','Rawalpindi','Gujranwala','Multan','Sialkot','Bahawalpur','Sargodha','Jhang','Sheikhupura','Gujrat','Rahim Yar Khan','Sahiwal','Okara','Wah Cantonment','Kasur','Dera Ghazi Khan','Mandi Bahauddin','Hafizabad','Chiniot','Attock','Vehari','Muzaffargarh','Khanewal','Pakpattan','Toba Tek Singh','Narowal','Layyah','Bhakkar','Chakwal','Khushab','Mianwali','Jhelum','Burewala','Kamalia','Kot Addu','Lodhran','Arifwala','Jaranwala','Wazirabad','Gujranwala Cantonment','Murree','Taxila'],
-  Sindh:['Karachi','Hyderabad','Sukkur','Larkana','Nawabshah','Mirpur Khas','Jacobabad','Shikarpur','Khairpur','Dadu','Thatta','Badin','Tando Adam','Tando Allahyar','Matiari','Umerkot','Sanghar','Ghotki','Kandhkot','Kashmore','Kotri','Jamshoro','Sehwan','Moro','Naushahro Feroze','Ratodero','Qambar','Kambar Shahdadkot','Mirpur Mathelo','Daharki','Hala'],
-  'Khyber Pakhtunkhwa':['Peshawar','Mardan','Mingora','Abbottabad','Kohat','Dera Ismail Khan','Nowshera','Swabi','Charsadda','Mansehra','Haripur','Bannu','Karak','Lakki Marwat','Tank','Chitral','Dir','Timergara','Batkhela','Daggar','Topi','Hangu','Jamrud','Kabal','Matta','Takht-i-Bahi','Risalpur','Parachinar','Saidu Sharif','Besham'],
-  Balochistan:['Quetta','Turbat','Khuzdar','Chaman','Gwadar','Sibi','Zhob','Loralai','Dera Murad Jamali','Hub','Usta Muhammad','Kharan','Nushki','Dalbandin','Kalat','Mastung','Pishin','Qila Saifullah','Qila Abdullah','Lasbela','Panjgur','Awaran','Dera Bugti','Jhal Magsi','Kachhi','Kohlu','Mastung','Washuk'],
-  'Islamabad Capital Territory':['Islamabad']
-};
-const SX_DELIVERY_DEFAULT=250;
-let SX_CUSTOMER=null, SX_PROFILE=null, SX_ADDRESSES=[], SX_CART=[];
-let SX_ORDER_CACHE=[];
-const SX_STATUS_ORDER=['pending','confirmed','packed','shipped','out_for_delivery','delivered'];
-const SX_STATUS_LABEL={pending:'Order placed',confirmed:'Confirmed',packed:'Packed',shipped:'Shipped',out_for_delivery:'Out for delivery',delivered:'Delivered',cancelled:'Cancelled'};
-const SX_CANCEL_REASONS=['Changed my mind','Ordered by mistake','Found a better price','Delivery time is too long','Wrong product/quantity','No longer needed'];
-function sxGetCart(){try{return JSON.parse(localStorage.getItem('sx_cart_v1')||'[]')}catch(_){return[]}}
-function sxSetCart(v){try{localStorage.setItem('sx_cart_v1',JSON.stringify(v))}catch(_){} SX_CART=v;}
-SX_CART=sxGetCart();
-function sxCartCount(){return SX_CART.reduce((n,x)=>n+Number(x.qty||0),0)}
-function sxCartSubtotal(){return SX_CART.reduce((n,x)=>n+(Number(x.price)||0)*(Number(x.qty)||0),0)}
-function sxProduct(id){return PRODUCTS.find(p=>p.id===id)}
-function sxImage(p){return mediaSrc((p&&p.mainImage)||((p&&p.images)||[])[0])}
-function sxSessionUser(){return SX_CUSTOMER}
-async function sxLoadCustomer(){
-  if(!supabaseClient)return;
-  const {data:{user}}=await supabaseClient.auth.getUser();
-  SX_CUSTOMER=user||null;
-  SX_PROFILE=null; SX_ADDRESSES=[];
-  if(!user)return;
-  try{const a=await supabaseClient.from('sx_customer_profiles').select('*').eq('user_id',user.id).maybeSingle();SX_PROFILE=a.data||null;}catch(e){console.warn(e)}
-  try{const a=await supabaseClient.from('sx_shipping_addresses').select('*').eq('user_id',user.id).order('is_default',{ascending:false}).order('created_at',{ascending:false});SX_ADDRESSES=a.data||[];}catch(e){console.warn(e)}
-}
-async function sxRefreshAndRender(){await sxLoadCustomer();render();}
-function sxRequireLogin(next){if(!SX_CUSTOMER){location.hash='/login?next='+encodeURIComponent(next||'/');return false}return true}
-function sxAddressDefault(){return SX_ADDRESSES.find(a=>a.is_default)||SX_ADDRESSES[0]||null}
-function sxSafeNext(){const q=route().split('?')[1]||'';return new URLSearchParams(q).get('next')||'/'}
-function sxEscAttr(v){return esc(v).replace(/`/g,'&#96;')}
-async function sxSignUp(form){
-  const fd=new FormData(form); const email=String(fd.get('email')||'').trim(); const password=String(fd.get('password')||''); const phone=String(fd.get('phone')||'').trim(); const name=String(fd.get('name')||'').trim();
-  const province=String(fd.get('province')||''); const city=String(fd.get('city')||''); const address=String(fd.get('address')||'').trim(); const postal=String(fd.get('postal_code')||'').trim();
-  if(password.length<6){toast('Password must be at least 6 characters');return}
-  if(!province||!city||!address){toast('Please complete your delivery address');return}
+/* ---------- Long-session / network recovery ---------- */
+let STOREX_RECOVERY_TIMER=null;
+async function refreshCloudStateAfterResume(){
+  if(!supabaseClient || !SUPABASE_READY || document.hidden) return;
   try{
-    const {data,error}=await supabaseClient.auth.signUp({email,password,options:{data:{full_name:name,phone}}}); if(error)throw error;
-    if(!data.user)throw new Error('Account could not be created.');
-    if(data.session) await sxLoadCustomer();
-    const userId=data.user.id;
-    const {error:pe}=await supabaseClient.from('sx_customer_profiles').upsert({user_id:userId,full_name:name,phone,email},{onConflict:'user_id'}); if(pe)throw pe;
-    const pendingAddress={label:'Default',receiver_name:name,phone,province,city,address_line:address,postal_code:postal,is_default:true};
-    if(!data.session){try{sessionStorage.setItem('sx_pending_address',JSON.stringify(pendingAddress))}catch(_){} toast('Account created. Please verify your email, then log in.');location.hash='/login';return}
-    const {error:ae}=await supabaseClient.from('sx_shipping_addresses').insert({user_id:userId,...pendingAddress}); if(ae)throw ae;
-    await sxLoadCustomer(); toast('Account created successfully ✓'); location.hash=sxSafeNext();
-  }catch(e){console.error(e);toast('Sign-up failed: '+(e.message||'Please try again'))}
+    const demo=buildDemoConfig();
+    SETTINGS=await loadKey(KEYS.settings,demo.settings);
+    PRODUCTS=await loadKey(KEYS.products,demo.products);
+    CATEGORIES=await loadKey(KEYS.categories,demo.categories);
+    FLASHSALES=await loadKey(KEYS.flashsales,demo.flashsales);
+    BANNERS=await loadKey(KEYS.banners,demo.banners);
+    MEDIA=await loadKey(KEYS.media,demo.media);
+    PAGES=await loadKey(KEYS.pages,demo.pages);
+    normalizeCloudState();
+    applyTheme();
+    render();
+    subscribeRealtime();
+  }catch(err){ console.warn('Store.X resume sync skipped:',err); }
 }
-async function sxLogin(form){
-  const fd=new FormData(form);try{const {error}=await supabaseClient.auth.signInWithPassword({email:String(fd.get('email')||'').trim(),password:String(fd.get('password')||'')});if(error)throw error;await sxLoadCustomer();try{const raw=sessionStorage.getItem('sx_pending_address');if(raw&&SX_CUSTOMER){const a=JSON.parse(raw);const q=await supabaseClient.from('sx_shipping_addresses').select('id').eq('user_id',SX_CUSTOMER.id).limit(1);if(!q.data?.length){await supabaseClient.from('sx_shipping_addresses').insert({user_id:SX_CUSTOMER.id,...a})}sessionStorage.removeItem('sx_pending_address');await sxLoadCustomer()}}catch(_){}toast('Welcome back ✓');location.hash=sxSafeNext();}catch(e){toast('Login failed: '+(e.message||'Invalid credentials'))}}
-async function sxLogout(){try{await supabaseClient.auth.signOut()}catch(_){}SX_CUSTOMER=null;SX_PROFILE=null;SX_ADDRESSES=[];toast('Signed out');render()}
-async function sxSaveProfile(form){if(!sxRequireLogin('/settings'))return;const fd=new FormData(form);try{const {error}=await supabaseClient.from('sx_customer_profiles').upsert({user_id:SX_CUSTOMER.id,full_name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:SX_CUSTOMER.email},{onConflict:'user_id'});if(error)throw error;await sxLoadCustomer();toast('Profile updated ✓');render()}catch(e){toast('Could not save profile: '+e.message)}}
-function sxCityOptions(province,selected){return (SX_PROVINCES[province]||[]).map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')}
-function sxCityPickerHtml(province,selected,name='city'){const id='sx-city-'+uid();return `<input name="${name}" id="${id}" list="${id}-list" value="${esc(selected||'')}" placeholder="Search your city" required><datalist id="${id}-list">${sxCityOptions(province,selected)}</datalist>`}
-function sxAddressForm(id){const a=id?SX_ADDRESSES.find(x=>x.id===id):null;const def=a||{label:'Home',receiver_name:((SX_PROFILE&&SX_PROFILE.full_name)||''),phone:((SX_PROFILE&&SX_PROFILE.phone)||''),province:'',city:'',address_line:'',postal_code:'',is_default:SX_ADDRESSES.length===0};showModal(`<div class="customer-head"><h2>${id?'Edit':'Add'} shipping address</h2><button class="x-close" onclick="closeModal()">&times;</button></div><form onsubmit="event.preventDefault();sxSaveAddress(this,'${id||''}')"><div class="form-grid-2"><div class="field"><label>Address label</label><input name="label" value="${esc(def.label||'Home')}" required></div><div class="field"><label>Receiver name</label><input name="receiver_name" value="${esc(def.receiver_name||'')}" required></div><div class="field"><label>Phone number</label><input name="phone" type="tel" value="${esc(def.phone||'')}" required></div><div class="field"><label>Province / Territory</label><select name="province" onchange="const f=this.form; const inp=f.querySelector('input[name=city]'); const dl=inp&&document.getElementById(inp.getAttribute('list')); if(dl)dl.innerHTML=sxCityOptions(this.value,'');" required><option value="">Select province</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}" ${p===def.province?'selected':''}>${esc(p)}</option>`).join('')}</select></div><div class="field"><label>City</label><div id="sx-city-field">${sxCityPickerHtml(def.province,def.city)}</div><div class="field-hint">Type to search your city.</div></div><div class="field"><label>Postal code</label><input name="postal_code" value="${esc(def.postal_code||'')}"></div><div class="field full"><label>Full delivery address</label><textarea name="address_line" required placeholder="House/flat, street, block, area, landmark">${esc(def.address_line||'')}</textarea></div><label class="checkline"><input type="checkbox" name="is_default" ${def.is_default?'checked':''}> Make this my default shipping address</label></div><div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">Save address</button></div></form>`)}
-async function sxSaveAddress(form,id){const fd=new FormData(form);const row={user_id:SX_CUSTOMER.id,label:String(fd.get('label')||'Home').trim(),receiver_name:String(fd.get('receiver_name')||'').trim(),phone:String(fd.get('phone')||'').trim(),province:String(fd.get('province')||''),city:String(fd.get('city')||''),address_line:String(fd.get('address_line')||'').trim(),postal_code:String(fd.get('postal_code')||'').trim(),is_default:fd.get('is_default')==='on'};try{if(row.is_default)await supabaseClient.from('sx_shipping_addresses').update({is_default:false}).eq('user_id',SX_CUSTOMER.id);let q;if(id)q=await supabaseClient.from('sx_shipping_addresses').update(row).eq('id',id).eq('user_id',SX_CUSTOMER.id);else q=await supabaseClient.from('sx_shipping_addresses').insert(row);if(q.error)throw q.error;await sxLoadCustomer();closeModal();toast('Address saved ✓');render()}catch(e){toast('Address save failed: '+e.message)}}
-async function sxDeleteAddress(id){if(!confirm('Delete this address?'))return;try{const {error}=await supabaseClient.from('sx_shipping_addresses').delete().eq('id',id).eq('user_id',SX_CUSTOMER.id);if(error)throw error;await sxLoadCustomer();render()}catch(e){toast('Could not delete address: '+e.message)}}
-function sxAddToCart(id,qty=1){const p=sxProduct(id);if(!p)return;if(Number(p.stock||0)<=0){toast('This product is currently out of stock');return}const found=SX_CART.find(x=>x.productId===id);if(found)found.qty=Math.min(Number(p.stock)||999,found.qty+qty);else SX_CART.push({productId:id,qty:Math.max(1,qty),price:Number(p.price)||0,title:p.title,image:sxImage(p)});sxSetCart(SX_CART);toast('Added to cart ✓');render()}
-function sxUpdateQty(id,qty){const p=sxProduct(id),x=SX_CART.find(i=>i.productId===id);if(!x)return;const max=Math.max(0,Number(p?.stock??999));x.qty=Math.min(max,Math.max(0,Number(qty)||0));if(x.qty===0)SX_CART=SX_CART.filter(i=>i.productId!==id);sxSetCart(SX_CART);render()}
-function sxClearCart(){SX_CART=[];sxSetCart([]);render()}
-function sxDeliveryCharge(){const charges=SX_CART.map(x=>Number(sxProduct(x.productId)?.deliveryCharge||0)).filter(n=>n>0);return charges.length?Math.max(...charges):Number(SETTINGS.deliveryCharge??SX_DELIVERY_DEFAULT)}
-function sxCartTotal(){return sxCartSubtotal()+sxDeliveryCharge()}
-async function sxPlaceOrder(form){
-  if(!sxRequireLogin('/checkout'))return; if(!SX_CART.length){toast('Your cart is empty');location.hash='/cart';return}
-  const fd=new FormData(form),addressId=String(fd.get('address_id')||'');const address=SX_ADDRESSES.find(a=>a.id===addressId)||sxAddressDefault();if(!address){toast('Please add a shipping address first');location.hash='/settings';return}
-  const note=String(fd.get('note')||'').trim();const contactPhone=String(fd.get('contact_phone')||address.phone).trim();
-  try{
-    const orderNumber='SX-'+new Date().getFullYear()+'-'+Math.random().toString(36).slice(2,8).toUpperCase();
-    const subtotal=sxCartSubtotal(),delivery=sxDeliveryCharge(),total=subtotal+delivery;
-    const items=SX_CART.map(x=>{const p=sxProduct(x.productId);return {product_id:x.productId,title:p?.title||x.title,sku:p?.sku||'',quantity:x.qty,unit_price:Number(p?.price??x.price)||0,image:x.image,weight:p?.delivery?.weight||p?.weight||'',dimensions:p?.delivery?.dimensions||p?.dimensions||'',is_fragile:!!(p?.delivery?.fragile||p?.fragile),is_liquid:!!(p?.delivery?.liquid||p?.liquid),is_flammable:!!(p?.delivery?.flammable||p?.flammable)}});
-    const payload={order_number:orderNumber,user_id:SX_CUSTOMER.id,status:'pending',payment_method:'cash_on_delivery',courier:'TCS',receiver_name:address.receiver_name,phone:contactPhone,email:SX_CUSTOMER.email||'',province:address.province,city:address.city,address_line:address.address_line,postal_code:address.postal_code,subtotal,delivery_charge:delivery,total,note,cancellation_reason:null,tracking_number:null,tracking_note:'Order received. You will be contacted for confirmation.',items};
-    const {data,error}=await supabaseClient.rpc('sx_create_order', {p_order:payload,p_items:items});
-    if(error)throw error;
-    SX_CART.forEach(x=>{const p=sxProduct(x.productId);if(p&&Number.isFinite(Number(p.stock)))p.stock=Math.max(0,Number(p.stock)-Number(x.qty||0));});await saveKey(KEYS.products,PRODUCTS);SX_CART=[];sxSetCart([]);toast('Order placed successfully ✓');location.hash='/orders/'+(data?.id||data||orderNumber);
-  }catch(e){console.error(e);toast('Order could not be placed: '+(e.message||'Please try again'))}
-}
-async function sxCancelOrder(id,form){if(!SX_CUSTOMER)return;const fd=new FormData(form);let reason=String(fd.get('reason')||'').trim();if(reason==='custom')reason=String(fd.get('custom')||'').trim();if(!reason){toast('Select or enter a cancellation reason');return}try{const {error}=await supabaseClient.from('sx_orders').update({status:'cancelled',cancellation_reason:reason,cancelled_at:new Date().toISOString()}).eq('id',id).eq('user_id',SX_CUSTOMER.id).in('status',['pending','confirmed']);if(error)throw error;toast('Order cancelled');await sxLoadOrders();render()}catch(e){toast('Cancellation failed: '+e.message)}}
-async function sxLoadOrders(){if(!SX_CUSTOMER)return[];try{const {data,error}=await supabaseClient.from('sx_orders').select('*,sx_order_items(*)').eq('user_id',SX_CUSTOMER.id).order('created_at',{ascending:false});if(error)throw error;SX_ORDER_CACHE=data||[];return SX_ORDER_CACHE}catch(e){console.warn(e);return[]}}
-async function sxAdminOrders(){try{const {data,error}=await supabaseClient.from('sx_orders').select('*,sx_order_items(*)').order('created_at',{ascending:false});if(error)throw error;return data||[]}catch(e){toast('Could not load orders: '+e.message);return[]}}
-async function sxAdminSetOrderStatus(id,status,tracking,trackingNote){try{const patch={status,tracking_number:tracking||null,tracking_note:trackingNote||null};if(status==='delivered')patch.delivered_at=new Date().toISOString();const {error}=await supabaseClient.rpc('sx_set_order_status',{p_order_id:id,p_status:status,p_tracking:tracking||null,p_note:trackingNote||null});if(error)throw error;toast('Order updated ✓');setAdminView('orders')}catch(e){toast('Order update failed: '+e.message)}}
-function sxStatusTrack(status){if(status==='cancelled')return `<div class="status-badge cancelled">Cancelled</div>`;const idx=SX_STATUS_ORDER.indexOf(status);return `<div class="status-track">${SX_STATUS_ORDER.map((s,i)=>`<div class="status-step ${i<=idx?'active':''}"><div class="dot"></div>${SX_STATUS_LABEL[s]}</div>`).join('')}</div>`}
-function sxRenderAuthPage(mode){const signup=mode==='signup';return `<div class="customer-shell"><div class="customer-card narrow"><div class="customer-head"><div><div class="logo-fallback">${esc(SETTINGS.siteName)}</div><h1 style="margin-top:8px">${signup?'Create your account':'Welcome back'}</h1></div><button class="x-close" onclick="location.hash='/'" aria-label="Close">&times;</button></div><div class="auth-tabs"><a class="${!signup?'active':''}" href="#/login${signup?'?next='+encodeURIComponent(sxSafeNext()):''}">Login</a><a class="${signup?'active':''}" href="#/signup${signup?'':'?next='+encodeURIComponent(sxSafeNext())}">Sign up</a></div>${signup?`<form onsubmit="event.preventDefault();sxSignUp(this)"><div class="form-grid-2"><div class="field full"><label>Full name</label><input name="name" autocomplete="name" required></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div><div class="field"><label>Phone number</label><input name="phone" type="tel" placeholder="03XXXXXXXXX" autocomplete="tel" required></div><div class="field"><label>Password</label><input name="password" type="password" minlength="6" autocomplete="new-password" required></div><div class="field"><label>Province / Territory</label><select name="province" onchange="const inp=this.form.querySelector('input[name=city]');const dl=document.getElementById(inp.getAttribute('list'));dl.innerHTML=sxCityOptions(this.value,'')" required><option value="">Select province</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div><div class="field"><label>City</label>${sxCityPickerHtml('','')}</div><div class="field full"><label>Full delivery address</label><textarea name="address" required placeholder="House/flat, street, area, landmark"></textarea></div><div class="field"><label>Postal code</label><input name="postal_code"></div></div><div class="secure-note">Pakistan delivery only. Your phone number will be used to confirm your Cash on Delivery order.</div><button class="btn" style="width:100%;justify-content:center;margin-top:14px">Create account</button></form>`:`<form onsubmit="event.preventDefault();sxLogin(this)"><div class="field"><label>Email</label><input name="email" type="email" autocomplete="username" required></div><div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div><button class="btn" style="width:100%;justify-content:center;margin-top:10px">Log in</button></form><div style="text-align:center;margin-top:14px;font-size:12px;color:var(--ink-soft)">New here? <a href="#/signup?next=${encodeURIComponent(sxSafeNext())}" style="color:var(--primary);font-weight:700">Create an account</a></div>`}</div></div>`}
-function sxRenderSettings(){if(!sxRequireLogin('/settings'))return '';return `<div class="customer-shell"><div class="customer-card"><div class="customer-head"><div><h1>Account settings</h1><p style="margin:4px 0;color:var(--ink-soft)">${esc(SX_CUSTOMER.email||'')}</p></div><button class="x-close" onclick="location.hash='/'">&times;</button></div><form onsubmit="event.preventDefault();sxSaveProfile(this)"><div class="form-grid-2"><div class="field"><label>Full name</label><input name="name" value="${esc(SX_PROFILE?.full_name||'')}" required></div><div class="field"><label>Phone number</label><input name="phone" value="${esc(SX_PROFILE?.phone||'')}" required></div></div><button class="btn small">Save account</button></form><hr style="border:0;border-top:1px solid var(--line);margin:22px 0"><h3>Shipping addresses</h3>${SX_ADDRESSES.map(a=>`<div class="address-card ${a.is_default?'default':''}"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${esc(a.label)}</b> ${a.is_default?'<span class="status-badge confirmed">Default</span>':''}<div style="font-size:13px;margin-top:5px">${esc(a.receiver_name)} · ${esc(a.phone)}<br>${esc(a.address_line)}, ${esc(a.city)}, ${esc(a.province)} ${esc(a.postal_code||'')}</div></div><div style="display:flex;gap:6px"><button class="btn small ghost" onclick="sxAddressForm('${a.id}')">Edit</button><button class="btn small danger" onclick="sxDeleteAddress('${a.id}')">Delete</button></div></div></div>`).join('')}<button class="btn small ghost" onclick="sxAddressForm()">+ Add address</button><div style="margin-top:18px"><button class="btn secondary" onclick="sxLogout()">Log out</button></div></div></div>`}
-function sxRenderCart(){return `<div class="customer-shell"><div class="customer-card"><div class="customer-head"><h1>Your cart</h1><button class="x-close" onclick="location.hash='/'">&times;</button></div>${SX_CART.length?`${SX_CART.map(x=>`<div class="cart-row"><img src="${esc(sxImage(sxProduct(x.productId))||x.image||'')}" alt=""><div><b>${esc(x.title)}</b><div style="font-size:12px;color:var(--ink-soft)">${fmtMoney(x.price)} each</div></div><div class="qty-control"><button onclick="sxUpdateQty('${x.productId}',${x.qty-1})">−</button><span>${x.qty}</span><button onclick="sxUpdateQty('${x.productId}',${x.qty+1})">+</button></div><div style="font-weight:800">${fmtMoney(x.price*x.qty)}</div></div>`).join('')}<div class="summary-line"><span>Subtotal</span><b>${fmtMoney(sxCartSubtotal())}</b></div><div class="summary-line"><span>Delivery</span><b>${fmtMoney(sxDeliveryCharge())}</b></div><div class="summary-line summary-total"><span>Total</span><b>${fmtMoney(sxCartTotal())}</b></div><div style="display:flex;gap:8px;margin-top:14px"><button class="btn" onclick="location.hash='/checkout'">Proceed to checkout</button><button class="btn ghost" onclick="sxClearCart()">Clear</button></div>`:`<div class="empty-state"><div class="icon">🛒</div><h3>Your cart is empty</h3><a href="#/category/all" class="btn small">Browse products</a></div>`}</div></div>`}
-function sxRenderCheckout(){if(!sxRequireLogin('/checkout'))return '';const a=sxAddressDefault();return `<div class="customer-shell"><div class="container"><div class="customer-head"><div><h1>Checkout</h1><p style="color:var(--ink-soft)">Cash on Delivery · Delivered by TCS</p></div></div><div class="checkout-grid"><div class="customer-card" style="max-width:none"><h3>Delivery address</h3>${SX_ADDRESSES.length?`<div class="form-grid-2">${SX_ADDRESSES.map(x=>`<label class="address-card ${x.id===(a?.id)?'default':''}" style="cursor:pointer"><input type="radio" name="dummy" ${x.id===(a?.id)?'checked':''} onchange="document.querySelectorAll('[data-address-radio]').forEach(e=>e.checked=false);document.getElementById('checkout-address').value='${esc(x.id)}';this.checked=true" data-address-radio><b>${esc(x.label)}</b><div style="font-size:12px">${esc(x.receiver_name)} · ${esc(x.phone)}<br>${esc(x.address_line)}, ${esc(x.city)}, ${esc(x.province)}</div></label>`).join('')}</div><input type="hidden" id="checkout-address" value="${esc(a?.id||'')}"><button type="button" class="btn small ghost" onclick="sxAddressForm()">+ Add another address</button>`:`<div class="secure-note">No shipping address saved yet.</div><button type="button" class="btn small" onclick="sxAddressForm()">Add shipping address</button>`}<form id="checkout-form" onsubmit="event.preventDefault();const f=new FormData(this);f.set('address_id',document.getElementById('checkout-address')?.value||'');sxPlaceOrder(this);"><div class="field full" style="margin-top:16px"><label>Contact number for order confirmation</label><input name="contact_phone" type="tel" value="${esc(a?.phone||SX_PROFILE?.phone||'')}" required><div class="field-hint">You will be asked via this number to confirm your order. We may call or use WhatsApp.</div></div><div class="field full" style="margin-top:10px"><label>Order note (optional)</label><textarea name="note" placeholder="Any delivery instruction"></textarea></div><div class="secure-note">You will be asked via this number to confirm your order. We may call or contact you through WhatsApp before dispatch.</div><button class="btn" style="margin-top:14px;width:100%;justify-content:center" ${a?'':'disabled'}>Confirm order · Cash on Delivery</button></form></div><aside class="summary-box"><h3 style="margin-top:0">Order summary</h3>${SX_CART.map(x=>`<div class="summary-line"><span>${esc(x.title)} × ${x.qty}</span><b>${fmtMoney(x.price*x.qty)}</b></div>`).join('')}<div class="summary-line"><span>Delivery charges</span><b>${fmtMoney(sxDeliveryCharge())}</b></div><div class="summary-line summary-total"><span>Total</span><b>${fmtMoney(sxCartTotal())}</b></div><p style="font-size:11px;color:var(--ink-soft)">Payment method: Cash on Delivery<br>Courier: TCS</p></aside></div></div></div>`}
-function sxOrderTrack(order){const status=order.status||'pending';return `<div class="customer-card" style="max-width:none"><div class="order-meta"><div><b>${esc(order.order_number)}</b><div style="font-size:12px;color:var(--ink-soft)">${new Date(order.created_at).toLocaleString()}</div></div><span class="status-badge ${status}">${esc(SX_STATUS_LABEL[status]||status)}</span></div>${sxStatusTrack(status)}<div class="secure-note">${esc(order.tracking_note||'Your order status will appear here as it changes.')}${order.tracking_number?`<br><b>Tracking:</b> ${esc(order.tracking_number)}`:''}</div><h3>Items</h3>${(order.sx_order_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0;font-size:13px"><span>${esc(i.title)} × ${i.quantity}</span><b>${fmtMoney(i.unit_price*i.quantity)}</b></div>`).join('')}<div class="summary-line summary-total"><span>Total</span><b>${fmtMoney(order.total)}</b></div><p style="font-size:12px;color:var(--ink-soft)">Delivery to ${esc(order.city)}, ${esc(order.province)}<br>${esc(order.address_line)}</p>${['pending','confirmed'].includes(status)?`<form onsubmit="event.preventDefault();sxCancelOrder('${order.id}',this)" style="margin-top:14px"><label style="font-size:12px;font-weight:700">Cancel order</label><select name="reason" required onchange="this.form.querySelector('[name=custom]').style.display=this.value==='custom'?'block':'none'"><option value="">Choose a reason</option>${SX_CANCEL_REASONS.map(r=>`<option>${esc(r)}</option>`).join('')}<option value="custom">Custom reason</option></select><textarea name="custom" placeholder="Custom reason" style="display:none;margin-top:8px"></textarea><button class="btn small danger" style="margin-top:8px">Cancel order</button></form>`:''}</div>`}
-async function sxRenderOrders(singleId){if(!sxRequireLogin('/orders'))return '';if(!SX_ORDER_CACHE.length)await sxLoadOrders();let orders=SX_ORDER_CACHE;if(singleId)orders=orders.filter(o=>o.id===singleId||o.order_number===singleId);return `<div class="customer-shell"><div class="customer-card" style="max-width:900px"><div class="customer-head"><div><h1>${singleId?'Order details':'Order history'}</h1></div><button class="x-close" onclick="location.hash='/'">&times;</button></div>${orders.length?`<div class="order-list">${orders.map(o=>sxOrderTrack(o)).join('')}</div>`:`<div class="empty-state"><h3>No orders yet</h3><a href="#/category/all" class="btn small">Start shopping</a></div>`}</div></div>`}
-function sxRenderPublicTrack(id){return `<div class="customer-shell"><div class="customer-card narrow"><div class="customer-head"><div><h1>Track order</h1><p style="color:var(--ink-soft)">${esc(id)}</p></div><button class="x-close" onclick="location.hash='/'">&times;</button></div><div id="public-track-box"><p>Loading order status…</p></div></div></div>`}
-async function sxLoadPublicTrack(id){try{const {data,error}=await supabaseClient.rpc('sx_track_order',{p_order_number:id});if(error)throw error;const box=document.getElementById('public-track-box');if(!box)return;if(!data){box.innerHTML='<p>Order not found.</p>';return}const order=Array.isArray(data)?data[0]:data;box.innerHTML=`<div class="order-meta"><div><b>${esc(order.order_number)}</b><div style="font-size:12px;color:var(--ink-soft)">${new Date(order.created_at).toLocaleString()}</div></div><span class="status-badge ${esc(order.status)}">${esc(SX_STATUS_LABEL[order.status]||order.status)}</span></div>${sxStatusTrack(order.status)}<div class="secure-note">${esc(order.tracking_note||'Your order status will appear here as it changes.')}${order.tracking_number?`<br><b>Tracking:</b> ${esc(order.tracking_number)}`:''}</div><div style="margin-top:14px;font-weight:800">Total: ${fmtMoney(order.total)}</div>`;}catch(e){const b=document.getElementById('public-track-box');if(b)b.innerHTML='<p>Unable to load tracking right now.</p>'}}
-function sxRenderOrderPrint(order){const base=location.origin&&location.origin!=='null'?location.origin:location.href.split('#')[0];const track=base+'#/track/'+encodeURIComponent(order.order_number);return `<div class="order-detail-print" id="print-order-sheet"><div class="print-brand"><div><div style="font-size:26px;font-weight:900">${esc(SETTINGS.siteName)}</div><div style="font-size:12px;color:#666">COD delivery order</div><div style="margin-top:10px"><span class="tcs-mark">TCS</span> <span style="font-size:12px;color:#666">Courier</span></div></div><div><div id="order-qr" class="qr-box"></div><div style="font-size:9px;text-align:center;width:120px">Scan to track order</div></div></div><h2>Order ${esc(order.order_number)}</h2><div class="admin-order-grid"><div><b>Receiver</b><p>${esc(order.receiver_name)}<br>${esc(order.phone)}<br>${esc(order.email)}</p><b>Delivery address</b><p>${esc(order.address_line)}<br>${esc(order.city)}, ${esc(order.province)} ${esc(order.postal_code||'')}</p></div><div><b>Order</b><p>${esc(SX_STATUS_LABEL[order.status]||order.status)}<br>Payment: Cash on Delivery<br>Courier: TCS<br>Tracking: ${esc(order.tracking_number||'—')}</p><b>Shipment information</b><p>Weight / dimensions and handling flags are shown to the courier/admin only.</p></div></div><h3>Items</h3>${(order.sx_order_items||[]).map(i=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:8px 0"><span>${esc(i.title)} × ${i.quantity}<small style="display:block;color:#666">SKU: ${esc(i.sku||'')} · Weight: ${esc(i.weight||'')} · Dimensions: ${esc(i.dimensions||'')} · ${i.is_fragile?'Fragile · ':''}${i.is_liquid?'Liquid · ':''}${i.is_flammable?'Flammable':''}</small></span><b>${fmtMoney(i.unit_price*i.quantity)}</b></div>`).join('')}<div style="margin-top:14px;text-align:right;font-size:18px;font-weight:900">Total: ${fmtMoney(order.total)}</div></div><script>window.__PRINT_TRACK=${JSON.stringify(track)};<\/script>`}
-async function sxOpenOrderDetails(id){try{const {data,error}=await supabaseClient.from('sx_orders').select('*,sx_order_items(*)').eq('id',id).single();if(error)throw error;showModal(`<div class="customer-head"><h2>Order details</h2><button class="x-close" onclick="closeModal()">&times;</button></div><div class="field"><label>Paper / label size</label><select id="sx-print-size" onchange="const c=this.value==='custom';document.getElementById('sx-custom-size').style.display=c?'grid':'none'"><option value="5x7">5 × 7 in</option><option value="5x8">5 × 8 in</option><option value="6x9" selected>6 × 9 in</option><option value="7x9">7 × 9 in</option><option value="custom">Custom size</option></select></div><div id="sx-custom-size" class="form-grid-2" style="display:none;margin-bottom:12px"><div class="field"><label>Width (inches)</label><input id="sx-print-w" type="number" min="1" step="0.1" value="6"></div><div class="field"><label>Height (inches)</label><input id="sx-print-h" type="number" min="1" step="0.1" value="9"></div></div><div id="admin-print-content">${sxRenderOrderPrint(data)}</div><div class="modal-close-row"><button class="btn ghost" onclick="sxSaveOrderImage('${id}')">Save as image</button><button class="btn" onclick="sxPrintOrder('${id}')">Save / print PDF</button><button class="btn ghost" onclick="closeModal()">Close</button></div>`);setTimeout(()=>{const qr=document.getElementById('order-qr');if(window.QRCode&&qr)new QRCode(qr,{text:window.__PRINT_TRACK,width:120,height:120});},250)}catch(e){toast('Could not open order details: '+e.message)}}
-function sxPrintDimensions(){const sel=document.getElementById('sx-print-size')?.value||'6x9';if(sel==='custom')return {w:Number(document.getElementById('sx-print-w')?.value)||6,h:Number(document.getElementById('sx-print-h')?.value)||9};const [w,h]=sel.split('x').map(Number);return {w,h}}
-async function sxSaveOrderImage(id){const node=document.getElementById('print-order-sheet');if(!node||!window.html2canvas){toast('Image export library is not loaded yet');return}try{const d=sxPrintDimensions();const scale=2;const c=await html2canvas(node,{scale,backgroundColor:'#fff',width:Math.round(d.w*96),height:Math.round(d.h*96)});const a=document.createElement('a');a.download='StoreX-'+id+'-'+d.w+'x'+d.h+'.png';a.href=c.toDataURL('image/png');a.click()}catch(e){toast('Could not save image: '+e.message)}}
-async function sxPrintOrder(id){const node=document.getElementById('print-order-sheet');if(!node)return;const d=sxPrintDimensions();const w=window.open('','_blank','noopener');if(!w){toast('Please allow popups to print the order');return}w.document.write('<html><head><title>Store.X Order</title><style>@page{size:'+d.w+'in '+d.h+'in;margin:.2in}body{font-family:Arial,sans-serif;margin:0;padding:0;color:#111}.order-detail-print{padding:18px;box-sizing:border-box;width:100%}</style></head><body>'+node.outerHTML+'</body></html>');w.document.close();setTimeout(()=>w.print(),400)}
-function sxProductCard(p){const stock=Number(p.stock??0);const img=sxImage(p);return `<article class="card"><a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${esc(img)}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>${p.badge?`<span class="card-badge">${esc(p.badge)}</span>`:''}<div class="card-body"><a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-title">${esc(p.shortTitle||p.title)}</a><div class="price">${fmtMoney(p.price)} ${p.oldPrice?`<span class="price-old">${fmtMoney(p.oldPrice)}</span>`:''}</div><div style="font-size:11px;color:${stock>0?'#1a7f37':'#b42318'};font-weight:700">${stock>0?stock+' in stock':'Out of stock'}</div><button class="card-cta" ${stock<=0?'disabled':''} onclick="event.preventDefault();sxAddToCart('${p.id}',1)">${stock>0?'Add to cart':'Out of stock'}</button></div></article>`}
-function sxPatchProductForm(){
-  const oldOpen=openProductModal; window.__sxOriginalOpenProductModal=oldOpen;
-  openProductModal=function(id){
-    const p=id?PRODUCTS.find(x=>x.id===id):{id:uid(),title:'',shortTitle:'',shortDesc:'',fullDesc:'',images:[],mainImage:null,category:'',tags:[],price:'',oldPrice:'',discount:'',badge:'',sku:'',status:'published',featured:false,trending:false,newArrival:false,bestSeller:false,order:PRODUCTS.length,stock:0,deliveryCharge:SX_DELIVERY_DEFAULT,delivery:{weight:'',dimensions:'',fragile:false,liquid:false,flammable:false},seo:{slug:'',title:'',description:'',keywords:''},clicks:0,views:0};
-    p.delivery=p.delivery||{weight:p.weight||'',dimensions:p.dimensions||'',fragile:!!p.fragile,liquid:!!p.liquid,flammable:!!p.flammable};p.stock=Number(p.stock||0);p.deliveryCharge=Number(p.deliveryCharge??SX_DELIVERY_DEFAULT);
-    const isNew=!id,catOptions=CATEGORIES.map(c=>`<option value="${c.id}" ${p.category===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
-    showModal(`<h2>${isNew?'Add Product':'Edit Product'}</h2><form id="product-form" onsubmit="event.preventDefault();sxSaveProductForm('${p.id}',${isNew})"><div class="form-grid"><div class="field full"><label>Product title *</label><input required name="title" value="${esc(p.title)}"></div><div class="field"><label>SKU / reference</label><input name="sku" value="${esc(p.sku)}"></div><div class="field"><label>Category</label><select name="category"><option value="">— None —</option>${catOptions}</select></div><div class="field"><label>Price</label><input type="number" name="price" value="${esc(p.price)}"></div><div class="field"><label>Stock quantity</label><input type="number" min="0" name="stock" value="${esc(p.stock)}"></div><div class="field"><label>Delivery charge (Rs.)</label><input type="number" min="0" name="deliveryCharge" value="${esc(p.deliveryCharge)}"></div><div class="field"><label>Status</label><select name="status"><option value="published" ${p.status==='published'?'selected':''}>Published</option><option value="hidden" ${p.status==='hidden'?'selected':''}>Hidden</option></select></div><div class="field full"><label>Short description</label><input name="shortDesc" value="${esc(p.shortDesc)}"></div><div class="field full"><label>Full description</label><textarea name="fullDesc">${esc(p.fullDesc)}</textarea></div><div class="field full"><label>Tags</label><input name="tags" value="${esc((p.tags||[]).join(', '))}"></div><div class="field"><label>Weight</label><input name="weight" placeholder="e.g. 0.8 kg" value="${esc(p.delivery.weight)}"></div><div class="field"><label>Dimensions</label><input name="dimensions" placeholder="e.g. 20 × 15 × 8 cm" value="${esc(p.delivery.dimensions)}"></div><div class="field full"><label>Delivery handling</label><div style="display:flex;gap:16px;flex-wrap:wrap"><label class="checkline"><input type="checkbox" name="fragile" ${p.delivery.fragile?'checked':''}> Fragile</label><label class="checkline"><input type="checkbox" name="liquid" ${p.delivery.liquid?'checked':''}> Liquid</label><label class="checkline"><input type="checkbox" name="flammable" ${p.delivery.flammable?'checked':''}> Flammable</label></div><div class="field-hint">These details are kept for admin/courier paperwork and are not shown on the public product page.</div></div><div class="field full"><label>Product images</label><div class="upload-box"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{const p=window.__sxEditingProduct;p.images=p.images||[];p.images.push(url);p.mainImage=p.mainImage||url;document.getElementById('sx-img-list').innerHTML=p.images.map(im=>'<div class=\"t\"><img src=\"'+mediaSrc(im)+'\"></div>').join('')})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{const p=window.__sxEditingProduct;p.images=p.images||[];p.images.push(url);p.mainImage=p.mainImage||url;document.getElementById('sx-img-list').innerHTML=p.images.map(im=>'<div class=\"t\"><img src=\"'+mediaSrc(im)+'\"></div>').join('')})">Choose from Media</button><div id="sx-img-list" class="thumb-picker">${(p.images||[]).map(im=>`<div class="t"><img src="${mediaSrc(im)}"></div>`).join('')}</div></div></div></div><div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">Save Product</button></div></form>`);
-    if(isNew)window.__draftProduct=p; else window.__draftProduct=null;
-    window.__sxEditingProduct=p;
-  }
-}
-async function sxSaveProductForm(pid,isNew){const form=document.getElementById('product-form');const fd=new FormData(form);const draft=isNew?window.__draftProduct:PRODUCTS.find(x=>x.id===pid);if(!draft)return;Object.assign(draft,{title:String(fd.get('title')||'').trim(),sku:String(fd.get('sku')||'').trim(),category:String(fd.get('category')||''),price:Number(fd.get('price'))||0,stock:Number(fd.get('stock'))||0,deliveryCharge:Number(fd.get('deliveryCharge'))||0,shortDesc:String(fd.get('shortDesc')||'').trim(),fullDesc:String(fd.get('fullDesc')||'').trim(),tags:String(fd.get('tags')||'').split(',').map(x=>x.trim()).filter(Boolean),status:String(fd.get('status')||'published'),delivery:{weight:String(fd.get('weight')||''),dimensions:String(fd.get('dimensions')||''),fragile:fd.get('fragile')==='on',liquid:fd.get('liquid')==='on',flammable:fd.get('flammable')==='on'}});draft.shortTitle=draft.shortTitle||draft.title;draft.seo=draft.seo||{slug:slugify(draft.title),title:'',keywords:'',description:''};if(isNew){PRODUCTS.push(draft);window.__draftProduct=null}await saveKey(KEYS.products,PRODUCTS);closeModal();toast('Product saved to Supabase ✓');render()}
-function sxPatchProductCard(){window.renderProductCard=sxProductCard}
-function sxPatchHeader(){
-  window.renderHeader=function(){const logo=SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" alt="${esc(SETTINGS.siteName)} logo" style="width:${SETTINGS.logoWidth}px;height:auto;max-height:56px">`:`<span class="logo-fallback">${esc(SETTINGS.siteName)}</span>`;return `<header id="site-header"><div class="container header-row"><button class="mobile-toggle" onclick="MOBILE_DRAWER_OPEN=true;render()" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><div class="logo-wrap"><a href="#/">${logo}</a></div><div class="search-wrap"><form class="search-form" onsubmit="event.preventDefault();performSearchQuery(this.q.value)" autocomplete="off"><input name="q" type="search" placeholder="Search products..." onfocus="openSearchSuggestions(this)" oninput="openSearchSuggestions(this)"><button type="submit">⌕</button><div class="search-suggestions"></div></form></div><nav class="main-nav"><a class="auth-link" href="${SX_CUSTOMER?'#/settings':'#/login'}">${SX_CUSTOMER?'Account':'Login / Sign up'}</a><a class="cart-link" href="#/cart">Cart <span class="cart-count">${sxCartCount()}</span></a></nav><button class="mobile-search-toggle" onclick="MOBILE_SEARCH_OPEN=!MOBILE_SEARCH_OPEN;render()" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button></div></header>`}
-}
-function sxPatchDrawer(){window.renderMobileDrawer=function(){if(!MOBILE_DRAWER_OPEN)return '';const cats=CATEGORIES.filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0));return `<div class="mobile-drawer open" onclick="if(event.target===this){MOBILE_DRAWER_OPEN=false;render()}"><div class="mobile-drawer-panel"><button class="mobile-drawer-close" onclick="MOBILE_DRAWER_OPEN=false;render()">&times;</button><div style="clear:both;height:8px"></div><a href="#/" onclick="MOBILE_DRAWER_OPEN=false">Home</a><a href="#/category/all" onclick="MOBILE_DRAWER_OPEN=false">All Products</a><a href="#/cart" onclick="MOBILE_DRAWER_OPEN=false">Cart (${sxCartCount()})</a><a href="${SX_CUSTOMER?'#/settings':'#/login'}" onclick="MOBILE_DRAWER_OPEN=false">${SX_CUSTOMER?'Account Settings':'Login / Sign up'}</a><a href="#/orders" onclick="MOBILE_DRAWER_OPEN=false">Order History</a><details class="mobile-category-group"><summary>All Categories <span>⌄</span></summary><div>${cats.map(c=>`<a href="#/category/${esc(c.slug)}" onclick="MOBILE_DRAWER_OPEN=false">${esc(c.name)}</a>`).join('')}</div></details></div></div>`}}
-function sxPatchFooter(){const old=renderFooter;window.renderFooter=function(){let h=old();return h.replace(/<a href="[^"]*"[^>]*>Visit us on Daraz<\/a>/g,'').replace('Purchases complete securely on Daraz','Cash on Delivery available across Pakistan')}}
-function sxPatchProductPage(){window.renderProductPage=function(key){const p=PRODUCTS.find(x=>(x.seo&&x.seo.slug)===key||x.id===key);if(!p||p.status!=='published')return renderNotFound('Product not found','This product may have been removed or is no longer available.');const stock=Number(p.stock??0),images=p.images&&p.images.length?p.images:(p.mainImage?[p.mainImage]:[]),main=images[PD_ACTIVE_IMG]||images[0],cat=CATEGORIES.find(c=>c.id===p.category);return `<div class="container" style="padding:30px 20px"><div class="crumb"><a href="#/">Home</a> / ${cat?`<a href="#/category/${esc(cat.slug)}">${esc(cat.name)}</a> / `:''}${esc(p.title)}</div><div class="pd-grid"><div><div class="pd-main-img">${main?`<img src="${mediaSrc(main)}" alt="${esc(p.title)}" loading="eager">`:''}</div>${images.length>1?`<div class="pd-thumbs">${images.map((im,i)=>`<img src="${mediaSrc(im)}" class="${i===PD_ACTIVE_IMG?'active':''}" loading="lazy" onclick="PD_ACTIVE_IMG=${i};render()">`).join('')}</div>`:''}</div><div><h1 class="pd-title">${esc(p.title)}</h1>${p.badge?`<span class="discount-pill">${esc(p.badge)}</span>`:''}<div class="pd-price">${fmtMoney(p.price)} ${p.oldPrice?`<span class="price-old">${fmtMoney(p.oldPrice)}</span>`:''}</div><div class="pd-desc">${esc(p.fullDesc||p.shortDesc||'')}</div>${p.tags?.length?`<div class="pd-tags">${p.tags.map(t=>`<span class="tag-pill">${esc(t)}</span>`).join('')}</div>`:''}<div style="margin:12px 0;font-size:13px;font-weight:800;color:${stock>0?'#1a7f37':'#b42318'}">${stock>0?stock+' in stock':'Out of stock'}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" style="flex:1" ${stock<=0?'disabled':''} onclick="sxAddToCart('${p.id}',1)">Add to cart</button><button class="btn" style="flex:1" ${stock<=0?'disabled':''} onclick="if(sxRequireLogin('/checkout')){sxAddToCart('${p.id}',1);location.hash='/checkout'}">Buy Now</button></div><div class="secure-note" style="margin-top:14px">Cash on Delivery · Delivered by TCS · You will be contacted on your phone/WhatsApp to confirm the order.</div></div></div></div>`}}
-function sxPatchAdmin(){
-  const oldSidebar=renderAdminSidebar;window.renderAdminSidebar=function(){return oldSidebar().replace("${item('media','Media Library')}",'')};
-  const oldView=renderAdminView;window.renderAdminView=function(){if(ADMIN_VIEW==='orders')return sxAdminOrdersView();return oldView()};
-  const oldDash=adminDashboard;window.adminDashboard=function(){return oldDash().replace('Top products by Daraz clicks','Top products by views').replace(/Daraz/g,'Store.X')};
-  const origSet=setAdminView;window.setAdminView=function(v){origSet(v)};
-  const oldAdminSidebar2=renderAdminSidebar;
-}
-function sxAdminOrdersView(){
-  // Render asynchronously after the shell is already visible.
-  setTimeout(async()=>{const rows=await sxAdminOrders();const host=document.getElementById('sx-admin-orders-host');if(!host)return;host.innerHTML=rows.length?rows.map(o=>`<div class="admin-card"><div class="order-meta"><div><h3 style="margin:0">${esc(o.order_number)}</h3><div style="font-size:12px;color:#666">${new Date(o.created_at).toLocaleString()} · ${esc(o.receiver_name)} · ${esc(o.phone)}</div></div><span class="status-badge ${o.status}">${esc(SX_STATUS_LABEL[o.status]||o.status)}</span></div><div style="font-size:13px;margin:10px 0">${(o.sx_order_items||[]).map(i=>`${esc(i.title)} × ${i.quantity}`).join(' · ')} · <b>${fmtMoney(o.total)}</b></div><div class="admin-order-grid"><div class="field"><label>Status</label><select id="os-${o.id}">${['pending','confirmed','packed','shipped','out_for_delivery','delivered','cancelled'].map(s=>`<option ${o.status===s?'selected':''} value="${s}">${SX_STATUS_LABEL[s]||s}</option>`).join('')}</select></div><div class="field"><label>TCS tracking number</label><input id="ot-${o.id}" value="${esc(o.tracking_number||'')}"></div><div class="field full"><label>Customer-facing status note</label><input id="on-${o.id}" value="${esc(o.tracking_note||'')}"></div></div><div class="row-actions" style="margin-top:10px"><button class="btn small" onclick="sxAdminSetOrderStatus('${o.id}',document.getElementById('os-${o.id}').value,document.getElementById('ot-${o.id}').value,document.getElementById('on-${o.id}').value)">Save status</button><button class="btn small ghost" onclick="sxOpenOrderDetails('${o.id}')">⋮ Details</button></div></div>`).join(''):'<div class="admin-card"><p>No orders yet.</p></div>'},0);
-  return `<div class="admin-topbar"><h1>Orders</h1><span class="help-note">Customer orders received through Supabase</span></div><div id="sx-admin-orders-host"><div class="admin-card">Loading orders…</div></div>`;
-}
-function sxPatchAdminSidebar(){const base=renderAdminSidebar;window.renderAdminSidebar=function(){let h=base();h=h.replace("<div class=\"group-label\">Marketing</div>","<div class=\"group-label\">Sales</div><button class=\"navlink ${ADMIN_VIEW==='orders'?'active':''}\" onclick=\"setAdminView('orders')\">Orders</button><div class=\"group-label\">Marketing</div>");h=h.replace(/<button class="navlink" onclick="setAdminView\('media'\)">Media Library<\/button>/,'');return h}}
-function sxPatchAdminProductStats(){
-  // Add stock and delivery fields without changing the existing Supabase settings storage model.
-  const old=adminProducts;window.adminProducts=function(){return old().replace('<th>Price</th>','<th>Price</th><th>Stock</th>').replace('<td>${fmtMoney(p.price)}</td>','<td>${fmtMoney(p.price)}</td><td>${Number(p.stock||0)}</td>')}
-}
-function sxPatchRouter(){const oldRender=render;window.render=async function(){const h=route();if(h.startsWith('/admin-of-storex')){document.getElementById('app').innerHTML=renderAdminRoot();wireAdminEvents();return}if(h==='/login'||h.startsWith('/login?')){document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderAuthPage('login')+'</main>'+renderFooter();return}if(h==='/signup'||h.startsWith('/signup?')){document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderAuthPage('signup')+'</main>'+renderFooter();return}if(h==='/settings'){await sxLoadCustomer();document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderSettings()+'</main>'+renderFooter();return}if(h==='/cart'){document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderCart()+'</main>'+renderFooter();return}if(h==='/checkout'){await sxLoadCustomer();document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderCheckout()+'</main>'+renderFooter();return}if(h==='/orders'||h.startsWith('/orders/')){await sxLoadCustomer();const id=h.split('/orders/')[1];document.getElementById('app').innerHTML=renderHeader()+'<main>'+await sxRenderOrders(id)+'</main>'+renderFooter();return}if(h.startsWith('/track/')){const id=decodeURIComponent(h.split('/track/')[1]);document.getElementById('app').innerHTML=renderHeader()+'<main>'+sxRenderPublicTrack(id)+'</main>'+renderFooter();setTimeout(()=>sxLoadPublicTrack(id),30);return}return oldRender()}}
-async function sxBootCustomer(){if(!supabaseClient)return;await sxLoadCustomer();supabaseClient.auth.onAuthStateChange(async()=>{await sxLoadCustomer();if(!route().startsWith('/admin-of-storex'))render()});}
-function sxInitUpgrade(){sxPatchHeader();sxPatchDrawer();sxPatchFooter();sxPatchProductPage();sxPatchProductCard();sxPatchProductForm();sxPatchAdminProductStats();sxPatchAdminSidebar();sxPatchAdmin();sxPatchRouter();}
-sxInitUpgrade();
-const sxOriginalInitSupabase=initSupabase;
-initSupabase=async function(){await sxOriginalInitSupabase();await sxBootCustomer();};
-// External helpers for PDF/image export. No TCS trademark artwork is embedded; the label is text only.
-(function(){if(!document.querySelector('script[data-sx-lib="qrcode"]')){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';s.dataset.sxLib='qrcode';document.head.appendChild(s)}if(!document.querySelector('script[data-sx-lib="html2canvas"]')){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';s.dataset.sxLib='html2canvas';document.head.appendChild(s)}})();
+window.addEventListener('online',refreshCloudStateAfterResume);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) refreshCloudStateAfterResume(); });
+STOREX_RECOVERY_TIMER=setInterval(()=>{ if(!document.hidden) refreshCloudStateAfterResume(); },15*60*1000);
 
 /* ================= INIT ================= */
 window.addEventListener('error', function(e){
@@ -2606,232 +2505,6 @@ boot().catch(function(err){
     app.innerHTML='<div style=\"min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Store.X could not start</h2><p style=\"margin:0;color:#666\">The HTML file has been protected from a blank white screen. Check the browser console for the exact error.</p></div></div>';
   }
 });
-
-/* ============================================================
-   STORE.X RETAIL UI FIX PACK v2
-   - Reliable search UI + trending/live suggestions
-   - Full-screen mobile drawer links
-   - Searchable city picker with famous cities first
-   - Demo inventory stock
-   - No client-side image optimization/compression
-   - No background-image lazy loader; visible/scroll images use native loading=lazy
-   ============================================================ */
-(function(){
-  const SX2_FAMOUS={
-    Punjab:['Lahore','Faisalabad','Rawalpindi','Gujranwala','Multan','Sialkot','Bahawalpur','Sargodha','Gujrat','Sheikhupura','Sahiwal','Okara','Rahim Yar Khan','Dera Ghazi Khan','Jhelum','Chakwal','Kasur','Wazirabad','Jaranwala','Murree','Taxila','Attock','Mianwali','Bhakkar','Vehari','Khanewal','Muzaffargarh','Layyah','Pakpattan','Toba Tek Singh','Narowal','Hafizabad','Chiniot','Mandi Bahauddin','Burewala','Arifwala','Kamalia','Kot Addu','Lodhran','Muridke','Gojra','Samundri','Shorkot','Daska','Pasrur','Shakargarh','Kharian','Dina','Pindi Bhattian','Pattoki','Chunian','Depalpur','Renala Khurd','Mailsi','Lodhran','Kabirwala','Jalalpur Pirwala','Shujaabad','Taunsa Sharif','Rajanpur','Alipur','Jatoi','Kot Mithan','Fateh Jang','Hasan Abdal','Kallar Syedan','Gujar Khan','Kahuta','Khewra'],
-    Sindh:['Karachi','Hyderabad','Sukkur','Larkana','Nawabshah','Mirpur Khas','Jacobabad','Shikarpur','Khairpur','Dadu','Thatta','Badin','Tando Adam','Tando Allahyar','Matiari','Umerkot','Sanghar','Ghotki','Kandhkot','Kashmore','Kotri','Jamshoro','Sehwan Sharif','Moro','Naushahro Feroze','Ratodero','Qambar','Mehar','Daharki','Mirpur Mathelo','Hala','Tando Muhammad Khan','Tando Jam','Sujawal','Mirpur Sakro','Makli','Khipro','Shahdadpur','Sinjhoro','Samaro','Kunri','Pithoro','Diplo','Mithi','Islamkot','Nagarparkar','Tharparkar','Rohri','Pano Aqil','Saleh Pat','Ranipur','Gambat','Sobho Dero','Nasarpur','Dokri','Bakhtawar','Warah','Kamber','Mian Sahib'],
-    'Khyber Pakhtunkhwa':['Peshawar','Mardan','Mingora','Abbottabad','Kohat','Dera Ismail Khan','Nowshera','Swabi','Charsadda','Mansehra','Haripur','Bannu','Karak','Lakki Marwat','Tank','Chitral','Dir','Timergara','Batkhela','Daggar','Topi','Hangu','Jamrud','Kabal','Matta','Takht-i-Bahi','Risalpur','Parachinar','Saidu Sharif','Besham','Buner','Barikot','Mastuj','Drosh','Wari','Dir Upper','Dir Lower','Chakdara','Dargai','Malakand','Thana','Pabbi','Jehangira','Rashakai','Akora Khattak','Khwazakhela','Alpuri','Kalam','Khanpur','Havelian','Battagram','Oghi','Balakot','Kaghan','Naran','Shinkiari','Kalabagh','Darra Adam Khel','Lachi','Sadda','Thall','Mir Ali','Miranshah','Kurram','Wana'],
-    Balochistan:['Quetta','Turbat','Khuzdar','Chaman','Gwadar','Sibi','Zhob','Loralai','Dera Murad Jamali','Hub','Usta Muhammad','Kharan','Nushki','Dalbandin','Kalat','Mastung','Pishin','Qila Saifullah','Qila Abdullah','Lasbela','Panjgur','Awaran','Dera Bugti','Jhal Magsi','Kachhi','Kohlu','Washuk','Bela','Ormara','Pasni','Jiwani','Surab','Kuchlak','Mastung','Kuchlak','Harnai','Duki','Muslim Bagh','Ziarat','Mach','Dhadar','Gandawah','Jhal Jao','Naushki','Rakhni','Killa Saifullah','Nok Kundi'],
-    'Islamabad Capital Territory':['Islamabad']
-  };
-  const famousSet={};
-  Object.keys(SX2_FAMOUS).forEach(k=>{famousSet[k]=new Set(SX2_FAMOUS[k].slice(0,12).map(x=>x.toLowerCase()));});
-
-  // Keep existing province lists but replace them with a larger, de-duplicated city directory.
-  Object.keys(SX2_FAMOUS).forEach(prov=>{
-    const old=Array.isArray(window.SX_PROVINCES?.[prov])?window.SX_PROVINCES[prov]:[];
-    const merged=[...SX2_FAMOUS[prov],...old];
-    window.SX_PROVINCES[prov]=[...new Set(merged.filter(Boolean))].sort((a,b)=>{
-      const af=famousSet[prov]?.has(a.toLowerCase())?0:1, bf=famousSet[prov]?.has(b.toLowerCase())?0:1;
-      return af-bf || a.localeCompare(b);
-    });
-  });
-
-  function cityPickerHtml2(province,selected,name='city'){
-    const id='sx-city-picker-'+uid();
-    return `<div class="sx-city-picker" data-province="${esc(province||'')}" data-selected="${esc(selected||'')}" data-city-id="${id}">
-      <input class="sx-city-input" name="${esc(name)}" id="${id}" value="${esc(selected||'')}" placeholder="Search or select your city" autocomplete="off" required
-        onfocus="sxOpenCityPicker(this)" oninput="sxFilterCityPicker(this)">
-      <div class="sx-city-menu" id="${id}-menu" role="listbox"></div>
-    </div>`;
-  }
-  function cityItems(province,q){
-    const list=window.SX_PROVINCES?.[province]||[]; const query=(q||'').trim().toLowerCase();
-    const famous=(list.filter(c=>famousSet[province]?.has(c.toLowerCase())));
-    const rest=list.filter(c=>!famousSet[province]?.has(c.toLowerCase()));
-    const ordered=[...famous,...rest];
-    return ordered.filter(c=>!query || c.toLowerCase().includes(query)).slice(0,80);
-  }
-  function renderCityMenu(input){
-    const wrap=input.closest('.sx-city-picker'); if(!wrap)return;
-    const province=wrap.dataset.province||''; const menu=wrap.querySelector('.sx-city-menu'); if(!menu)return;
-    const q=input.value||''; const list=cityItems(province,q);
-    menu.innerHTML=`<div class="sx-city-menu-head">${q?'Search results':'Popular cities first'} · ${esc(province||'Select province')}</div>`+
-      (list.length?list.map((c,i)=>`<button type="button" class="sx-city-option ${i<12&&!q?'popular':''}" data-city="${esc(c)}" onclick="sxChooseCity(this)"><span>${esc(c)}</span>${i<12&&!q?'<small>Popular</small>':''}</button>`).join(''):'<div class="sx-city-empty">No matching city. Try another spelling.</div>');
-    menu.classList.add('open');
-  }
-  window.sxOpenCityPicker=function(input){renderCityMenu(input)};
-  window.sxFilterCityPicker=function(input){renderCityMenu(input)};
-  window.sxChooseCity=function(btn){
-    const wrap=btn.closest('.sx-city-picker'),input=wrap?.querySelector('.sx-city-input'); if(!input)return;
-    input.value=btn.getAttribute('data-city')||''; wrap.dataset.selected=input.value; wrap.querySelector('.sx-city-menu')?.classList.remove('open');
-    input.dispatchEvent(new Event('change',{bubbles:true}));
-  };
-  document.addEventListener('click',e=>{
-    if(!e.target.closest('.sx-city-picker'))document.querySelectorAll('.sx-city-menu.open').forEach(x=>x.classList.remove('open'));
-  });
-
-  // Replace signup/address forms with the real searchable city selector.
-  window.sxRenderAuthPage=function(mode){
-    const signup=mode==='signup';
-    return `<div class="customer-shell"><div class="customer-card narrow"><div class="customer-head"><div><div class="logo-fallback">${esc(SETTINGS.siteName)}</div><h1 style="margin-top:8px">${signup?'Create your account':'Welcome back'}</h1></div><button class="x-close" onclick="location.hash='/'" aria-label="Close">&times;</button></div>
-      <div class="auth-tabs"><a class="${!signup?'active':''}" href="#/login${signup?'?next='+encodeURIComponent(sxSafeNext()):''}">Login</a><a class="${signup?'active':''}" href="#/signup${signup?'':'?next='+encodeURIComponent(sxSafeNext())}">Sign up</a></div>
-      ${signup?`<form onsubmit="event.preventDefault();sxSignUp(this)"><div class="form-grid-2">
-        <div class="field full"><label>Full name</label><input name="name" autocomplete="name" required></div>
-        <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
-        <div class="field"><label>Phone number</label><input name="phone" type="tel" placeholder="03XXXXXXXXX" autocomplete="tel" required></div>
-        <div class="field full"><label>Password</label><input name="password" type="password" minlength="6" autocomplete="new-password" required></div>
-        <div class="field full"><label>Province / Territory</label><select name="province" onchange="const w=this.closest('form').querySelector('.sx-city-picker'); if(w){w.dataset.province=this.value; const i=w.querySelector('.sx-city-input'); i.value=''; i.focus(); sxOpenCityPicker(i)}" required><option value="">Select province</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div>
-        <div class="field full"><label>City</label>${cityPickerHtml2('','')}</div>
-        <div class="field full"><label>Full delivery address</label><textarea name="address" required placeholder="House/flat, street, area, landmark"></textarea></div>
-        <div class="field"><label>Postal code</label><input name="postal_code" inputmode="numeric"></div>
-      </div><div class="secure-note">Pakistan delivery only. Your phone number will be used to confirm your Cash on Delivery order.</div><button class="btn" style="width:100%;justify-content:center;margin-top:14px">Create account</button></form>`:
-      `<form onsubmit="event.preventDefault();sxLogin(this)"><div class="field"><label>Email</label><input name="email" type="email" autocomplete="username" required></div><div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div><button class="btn" style="width:100%;justify-content:center;margin-top:10px">Log in</button></form><div style="text-align:center;margin-top:14px;font-size:12px;color:var(--ink-soft)">New here? <a href="#/signup?next=${encodeURIComponent(sxSafeNext())}" style="color:var(--primary);font-weight:700">Create an account</a></div>`}</div></div>`;
-  };
-
-  window.sxAddressForm=function(id){
-    const a=id?SX_ADDRESSES.find(x=>x.id===id):null;
-    const def=a||{label:'Home',receiver_name:((SX_PROFILE&&SX_PROFILE.full_name)||''),phone:((SX_PROFILE&&SX_PROFILE.phone)||''),province:'',city:'',address_line:'',postal_code:'',is_default:SX_ADDRESSES.length===0};
-    showModal(`<div class="customer-head"><h2>${id?'Edit':'Add'} shipping address</h2><button class="x-close" onclick="closeModal()">&times;</button></div><form onsubmit="event.preventDefault();sxSaveAddress(this,'${id||''}')"><div class="form-grid-2">
-      <div class="field"><label>Address label</label><input name="label" value="${esc(def.label||'Home')}" required></div>
-      <div class="field"><label>Receiver name</label><input name="receiver_name" value="${esc(def.receiver_name||'')}" required></div>
-      <div class="field"><label>Phone number</label><input name="phone" type="tel" value="${esc(def.phone||'')}" required></div>
-      <div class="field"><label>Province / Territory</label><select name="province" onchange="const w=this.closest('form').querySelector('.sx-city-picker'); w.dataset.province=this.value; const i=w.querySelector('.sx-city-input'); i.value=''; i.focus(); sxOpenCityPicker(i)" required><option value="">Select province</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}" ${p===def.province?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
-      <div class="field full"><label>City</label>${cityPickerHtml2(def.province,def.city)}<div class="field-hint">Tap the city field to open the full searchable list. Popular cities appear first.</div></div>
-      <div class="field"><label>Postal code</label><input name="postal_code" value="${esc(def.postal_code||'')}"></div>
-      <div class="field full"><label>Full delivery address</label><textarea name="address_line" required placeholder="House/flat, street, block, area, landmark">${esc(def.address_line||'')}</textarea></div>
-      <label class="checkline"><input type="checkbox" name="is_default" ${def.is_default?'checked':''}> Make this my default shipping address</label>
-    </div><div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn">Save address</button></div></form>`);
-  };
-
-  // More reliable search header. Suggestions are rendered in a dedicated layer and are
-  // keyboard/mouse accessible even when the header is re-rendered.
-  window.renderHeader=function(){
-    const logo=SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" alt="${esc(SETTINGS.siteName)} logo" style="width:${SETTINGS.logoWidth}px;height:auto;max-height:56px">`:`<span class="logo-fallback">${esc(SETTINGS.siteName)}</span>`;
-    return `<header id="site-header"><div class="container header-row">
-      <button class="mobile-toggle" type="button" onclick="MOBILE_DRAWER_OPEN=true;render()" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-      <div class="logo-wrap"><a href="#/">${logo}</a></div>
-      <div class="search-wrap"><form class="search-form" onsubmit="event.preventDefault();performSearchQuery(this.q.value)" autocomplete="off">
-        <input name="q" type="search" placeholder="Search products..." aria-label="Search products" onfocus="openSearchSuggestions(this)" oninput="openSearchSuggestions(this)" onclick="openSearchSuggestions(this)">
-        <button type="submit" aria-label="Search">⌕</button><div class="search-suggestions" role="listbox"></div>
-      </form></div>
-      <nav class="main-nav"><a class="auth-link" href="${SX_CUSTOMER?'#/settings':'#/login'}">${SX_CUSTOMER?'Account':'Login / Sign up'}</a><a href="#/orders">Orders</a><a class="cart-link" href="#/cart">Cart <span class="cart-count">${sxCartCount()}</span></a></nav>
-      <button class="mobile-search-toggle" type="button" onclick="MOBILE_SEARCH_OPEN=!MOBILE_SEARCH_OPEN;render()" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
-    </div></header>`;
-  };
-
-  window.openSearchSuggestions=function(input){
-    const box=input?.closest('.search-wrap')?.querySelector('.search-suggestions'); if(!box)return;
-    const q=String(input.value||'').trim();
-    let vals=q?searchSuggestions(q):trendingSearches();
-    if(!vals.length && !q) vals=Object.values(letterSuggestions()).flat().slice(0,12);
-    box.innerHTML=`<div class="search-suggestions-head">${q?'Suggestions':'Trending searches'}</div>`+
-      (vals.length?vals.map(v=>`<button type="button" class="search-suggestion" role="option" data-search-value="${esc(v)}" onclick="performSearchQuery(this.getAttribute('data-search-value'))"><span>${q?'':'↗ '}${esc(v)}</span><small>${q?'Search':'Trending'}</small></button>`).join(''):'<div style="padding:12px;color:var(--ink-soft);font-size:12px">No suggestions yet. Try a product name.</div>');
-    box.classList.add('open');
-  };
-
-  // Native lazy loading only: no IntersectionObserver for CSS background images.
-  // Convert legacy lazy background nodes to real lazy <img> nodes after each render.
-  window.initLazyMedia=function(){
-    document.querySelectorAll('[data-lazy-bg]').forEach(el=>{
-      const url=el.getAttribute('data-lazy-bg'); if(!url)return;
-      const img=document.createElement('img'); img.src=url; img.loading='lazy'; img.decoding='async'; img.alt=''; img.style.cssText='width:100%;height:100%;object-fit:cover;display:block;';
-      el.innerHTML=''; el.style.backgroundImage='none'; el.appendChild(img); el.removeAttribute('data-lazy-bg');
-    });
-    document.querySelectorAll('img:not([loading])').forEach(img=>{if(!img.closest('.pd-main-img'))img.loading='lazy';});
-  };
-
-  // Hide old Daraz-only promotional section from the retail storefront.
-  const oldRenderSection=window.renderSection;
-  window.renderSection=function(sec){if(sec?.type==='darazPromo')return '';return oldRenderSection(sec)};
-  window.renderDarazPromoSection=function(){return ''};
-
-  // Ensure demo products have useful inventory numbers for testing.
-  function ensureDemoStock(){
-    let changed=false;
-    (window.PRODUCTS||[]).forEach(p=>{
-      if(/^DEMO-/.test(String(p.sku||'')) || String(p.id||'').startsWith('p-')){
-        if(p.stock==null){p.stock=20;changed=true;}
-        if(p.deliveryCharge==null)p.deliveryCharge=250;
-        if(!p.delivery)p.delivery={weight:'0.5 kg',dimensions:'20 × 15 × 8 cm',fragile:false,liquid:false,flammable:false};
-      }
-    });
-    if(changed && typeof render==='function')setTimeout(()=>render(),50);
-  }
-  setTimeout(ensureDemoStock,900);
-
-  // Make drawer actions reliable and include account/order links.
-  window.renderMobileDrawer=function(){
-    if(!MOBILE_DRAWER_OPEN)return '';
-    const cats=(CATEGORIES||[]).filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0));
-    return `<div class="mobile-drawer open" onclick="if(event.target===this){MOBILE_DRAWER_OPEN=false;render()}"><div class="mobile-drawer-panel">
-      <button class="mobile-drawer-close" type="button" onclick="MOBILE_DRAWER_OPEN=false;render()">&times;</button>
-      <a href="#/" onclick="MOBILE_DRAWER_OPEN=false">Home</a>
-      <a href="#/category/all" onclick="MOBILE_DRAWER_OPEN=false">All Products</a>
-      <a href="#/orders" onclick="MOBILE_DRAWER_OPEN=false">Order History</a>
-      <a href="${SX_CUSTOMER?'#/settings':'#/login'}" onclick="MOBILE_DRAWER_OPEN=false">${SX_CUSTOMER?'Account Settings':'Login / Sign up'}</a>
-      <a href="#/cart" onclick="MOBILE_DRAWER_OPEN=false">Cart (${sxCartCount()})</a>
-      <details class="mobile-category-group"><summary>All Categories <span>⌄</span></summary><div>${cats.map(c=>`<a href="#/category/${esc(c.slug)}" onclick="MOBILE_DRAWER_OPEN=false">${esc(c.name)}</a>`).join('')}</div></details>
-    </div></div>`;
-  };
-
-  // Reapply the retail header/drawer after the earlier upgrade patches run.
-  sxPatchHeader();
-  sxPatchDrawer();
-})();
-
-</script>
-<script>
-/* Store.X FINAL INTERACTION FIX v4 */
-(function(){
-  // Reliable search on desktop and mobile.
-  window.openSearchSuggestions=function(input){
-    const form=input?.closest?.('.search-form'), box=form?.querySelector('.search-suggestions'); if(!box)return;
-    const q=String(input.value||'').trim(); let values=[];
-    try{values=q?searchSuggestions(q):trendingSearches();}catch(_){values=[];}
-    if(!values.length && !q) values=['All Products'];
-    box.innerHTML='<div class="search-suggestions-head">'+(q?'Suggestions':'Trending searches')+'</div>'+values.map(v=>`<button type="button" class="search-suggestion" data-search-value="${esc(v)}"><span>${q?'':'↗ '}${esc(v)}</span><small>${q?'Search':'Trending'}</small></button>`).join('');
-    box.classList.add('open');
-  };
-  window.performSearchQuery=function(v){const q=String(v||'').trim();if(!q)return false;document.querySelectorAll('.search-form input[name="q"]').forEach(i=>i.value=q);document.querySelectorAll('.search-suggestions').forEach(b=>b.classList.remove('open'));MOBILE_SEARCH_OPEN=false;location.hash='/search?q='+encodeURIComponent(q);return false;};
-  document.addEventListener('click',function(e){
-    const sug=e.target.closest?.('.search-suggestion[data-search-value]');
-    if(sug){e.preventDefault();e.stopPropagation();window.performSearchQuery(sug.getAttribute('data-search-value')||'');return;}
-    const ms=e.target.closest?.('.mobile-search-toggle');
-    if(ms){e.preventDefault();e.stopPropagation();MOBILE_SEARCH_OPEN=!MOBILE_SEARCH_OPEN;render();setTimeout(()=>{const i=document.querySelector('.search-form input[name="q"]');if(MOBILE_SEARCH_OPEN&&i){i.focus();openSearchSuggestions(i);}},30);}
-  },true);
-  document.addEventListener('submit',function(e){const f=e.target.closest?.('.search-form');if(!f)return;e.preventDefault();window.performSearchQuery(f.querySelector('input[name="q"]')?.value||'');},true);
-
-  // Header: mobile search gets the mobile-open class so it is actually visible.
-  window.renderHeader=function(){
-    const logo=SETTINGS.logo?`<img src="${mediaSrc(SETTINGS.logo)}" alt="${esc(SETTINGS.siteName)} logo" style="width:${SETTINGS.logoWidth}px;height:auto;max-height:56px">`:`<span class="logo-fallback">${esc(SETTINGS.siteName)}</span>`;
-    const q=String(new URLSearchParams((route().split('?')[1]||'')).get('q')||'');
-    return `<header id="site-header"><div class="container header-row"><button class="mobile-toggle" type="button" onclick="MOBILE_DRAWER_OPEN=true;render()" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button><div class="logo-wrap"><a href="#/">${logo}</a></div><div class="search-wrap"><form class="search-form ${MOBILE_SEARCH_OPEN?'mobile-open':''}" autocomplete="off"><input name="q" type="search" placeholder="Search products..." value="${esc(q)}" onfocus="openSearchSuggestions(this)" oninput="openSearchSuggestions(this)"><button type="submit" aria-label="Search">⌕</button><div class="search-suggestions"></div></form></div><nav class="main-nav"><a class="auth-link" href="${SX_CUSTOMER?'#/settings':'#/login'}">${SX_CUSTOMER?'Account':'Login / Sign up'}</a><a class="cart-link" href="#/cart">Cart <span class="cart-count">${sxCartCount()}</span></a></nav><button class="mobile-search-toggle" type="button" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button></div></header>`;
-  };
-
-  // Drawer must be present on login, signup, settings, cart and orders too.
-  window.renderMobileDrawer=function(){
-    if(!MOBILE_DRAWER_OPEN)return '';
-    const cats=(CATEGORIES||[]).filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0));
-    return `<div class="mobile-drawer open" role="dialog" aria-label="Menu" onclick="if(event.target===this){MOBILE_DRAWER_OPEN=false;render()}"><div class="mobile-drawer-panel"><button class="mobile-drawer-close" type="button" onclick="MOBILE_DRAWER_OPEN=false;render()" aria-label="Close menu">&times;</button><div style="clear:both;height:8px"></div><a href="#/" onclick="MOBILE_DRAWER_OPEN=false">Home</a><a href="#/category/all" onclick="MOBILE_DRAWER_OPEN=false">All Products</a><a href="#/cart" onclick="MOBILE_DRAWER_OPEN=false">Cart (${sxCartCount()})</a><a href="${SX_CUSTOMER?'#/settings':'#/login'}" onclick="MOBILE_DRAWER_OPEN=false">${SX_CUSTOMER?'Account Settings':'Login / Sign up'}</a><a href="#/orders" onclick="MOBILE_DRAWER_OPEN=false">Order History</a><details class="mobile-category-group"><summary>All Categories <span>⌄</span></summary><div>${cats.map(c=>`<a href="#/category/${esc(c.slug)}" onclick="MOBILE_DRAWER_OPEN=false">${esc(c.name)}</a>`).join('')}</div></details></div></div>`;
-  };
-
-  // City is free text. No hard-coded city territory/list is required.
-  window.sxCityPickerHtml=function(province,selected,name='city'){return `<input name="${esc(name)}" value="${esc(selected||'')}" placeholder="Enter your city" autocomplete="address-level2" required>`;};
-  window.cityPickerHtml2=window.sxCityPickerHtml;
-  window.sxRenderAuthPage=function(mode){
-    const signup=mode==='signup';
-    return `<div class="customer-shell"><div class="customer-card narrow"><div class="customer-head"><div><div class="logo-fallback">${esc(SETTINGS.siteName)}</div><h1 style="margin-top:8px">${signup?'Create your account':'Welcome back'}</h1></div><button class="x-close" onclick="location.hash='/'" aria-label="Close">&times;</button></div><div class="auth-tabs"><a class="${!signup?'active':''}" href="#/login">Login</a><a class="${signup?'active':''}" href="#/signup">Sign up</a></div>${signup?`<form onsubmit="event.preventDefault();sxSignUp(this)"><div class="form-grid-2"><div class="field full"><label>Full name</label><input name="name" autocomplete="name" required></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div><div class="field"><label>Phone number</label><input name="phone" type="tel" placeholder="03XXXXXXXXX" autocomplete="tel" required></div><div class="field full"><label>Password</label><input name="password" type="password" minlength="6" autocomplete="new-password" required></div><div class="field full"><label>Province / Territory</label><select name="province" required><option value="">Select province / territory</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div><div class="field full"><label>City</label><input name="city" placeholder="Enter your city" autocomplete="address-level2" required></div><div class="field full"><label>Full delivery address</label><textarea name="address" required placeholder="House/flat, street, area, landmark"></textarea></div><div class="field"><label>Postal code</label><input name="postal_code" autocomplete="postal-code"></div></div><div class="secure-note">Pakistan delivery only. Your phone number will be used to confirm your Cash on Delivery order.</div><button class="btn" style="width:100%;justify-content:center;margin-top:14px">Create account</button></form>`:`<form onsubmit="event.preventDefault();sxLogin(this)"><div class="field"><label>Email</label><input name="email" type="email" autocomplete="username" required></div><div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div><button class="btn" style="width:100%;justify-content:center;margin-top:14px">Login</button></form>`}</div></div>`;
-  };
-
-  // Replace address editor with province + manually entered city.
-  window.sxAddressForm=function(id){const a=id?SX_ADDRESSES.find(x=>x.id===id):null;const d=a||{label:'Home',receiver_name:((SX_PROFILE&&SX_PROFILE.full_name)||''),phone:((SX_PROFILE&&SX_PROFILE.phone)||''),province:'',city:'',address_line:'',postal_code:'',is_default:SX_ADDRESSES.length===0};showModal(`<div class="customer-head"><h2>${id?'Edit':'Add'} shipping address</h2><button class="x-close" onclick="closeModal()">&times;</button></div><form onsubmit="event.preventDefault();sxSaveAddress(this,'${id||''}')"><div class="form-grid-2"><div class="field"><label>Address label</label><input name="label" value="${esc(d.label||'Home')}" required></div><div class="field"><label>Receiver name</label><input name="receiver_name" value="${esc(d.receiver_name||'')}" required></div><div class="field"><label>Phone number</label><input name="phone" type="tel" value="${esc(d.phone||'')}" required></div><div class="field"><label>Province / Territory</label><select name="province" required><option value="">Select province / territory</option>${Object.keys(SX_PROVINCES).map(p=>`<option value="${esc(p)}" ${p===d.province?'selected':''}>${esc(p)}</option>`).join('')}</select></div><div class="field full"><label>City</label><input name="city" value="${esc(d.city||'')}" placeholder="Enter your city" autocomplete="address-level2" required></div><div class="field full"><label>Full delivery address</label><textarea name="address_line" required>${esc(d.address_line||'')}</textarea></div><div class="field"><label>Postal code</label><input name="postal_code" value="${esc(d.postal_code||'')}" autocomplete="postal-code"></div><div class="field"><label><input type="checkbox" name="is_default" ${d.is_default?'checked':''}> Make default address</label></div></div><button class="btn" type="submit">Save address</button></form>`);};
-
-  // Rebuild customer router so drawer exists on every relevant page.
-  const previousRender=window.render;
-  window.render=async function(){const h=route(),app=document.getElementById('app');if(h.startsWith('/admin-of-storex')){app.innerHTML=renderAdminRoot();wireAdminEvents();return;}if(h==='/login'||h.startsWith('/login?')){app.innerHTML=renderHeader()+'<main>'+sxRenderAuthPage('login')+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h==='/signup'||h.startsWith('/signup?')){app.innerHTML=renderHeader()+'<main>'+sxRenderAuthPage('signup')+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h==='/settings'){await sxLoadCustomer();app.innerHTML=renderHeader()+'<main>'+sxRenderSettings()+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h==='/cart'){app.innerHTML=renderHeader()+'<main>'+sxRenderCart()+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h==='/checkout'){await sxLoadCustomer();app.innerHTML=renderHeader()+'<main>'+sxRenderCheckout()+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h==='/orders'||h.startsWith('/orders/')){await sxLoadCustomer();const id=h.split('/orders/')[1];app.innerHTML=renderHeader()+'<main>'+await sxRenderOrders(id)+'</main>'+renderFooter()+renderMobileDrawer();return;}if(h.startsWith('/track/')){const id=decodeURIComponent(h.split('/track/')[1]);app.innerHTML=renderHeader()+'<main>'+sxRenderPublicTrack(id)+'</main>'+renderFooter()+renderMobileDrawer();setTimeout(()=>sxLoadPublicTrack(id),30);return;}return previousRender();};
-  window.addEventListener('hashchange',()=>{try{window.render();}catch(e){console.error(e);}});
-})();
 </script>
 </body>
 </html>
