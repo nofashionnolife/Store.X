@@ -294,7 +294,7 @@ img{max-width:100%;display:block;}
 /* ---------- Flash sale ---------- */
 .flash{background:var(--ink);color:#fff;border-radius:12px;overflow:hidden;position:relative;display:grid;grid-template-columns:1.1fr 1fr;min-height:200px;}
 .flash-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.35;}
-.flash-info{position:relative;padding:30px;display:flex;flex-direction:column;justify-content:center;gap:10px;}
+.flash-info{background:#FFFFFF;color:#1F2328;position:relative;padding:30px;display:flex;flex-direction:column;justify-content:center;gap:10px;}
 .flash-eyebrow{color:var(--primary);font-weight:700;font-size:13px;}
 .flash-info h3{font-size:26px;margin:0;font-weight:700;}
 .flash-info p{margin:0;color:rgba(255,255,255,.75);font-size:14px;}
@@ -302,8 +302,12 @@ img{max-width:100%;display:block;}
 .countdown .chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:8px 10px;min-width:52px;text-align:center;}
 .countdown .chip b{display:block;font-size:19px;font-family:'Space Grotesk';}
 .countdown .chip span{font-size:10px;color:rgba(255,255,255,.65);text-transform:uppercase;}
-.flash-visual{position:relative;background-size:cover;background-position:center;overflow:hidden;}
-.flash-visual-slide{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity .8s ease;}
+.flash-visual{position:relative;background-color:#FFFFFF;background-position:center;background-repeat:no-repeat;overflow:hidden;}
+.flash-visual img{width:100%;height:100%;display:block;object-position:center;}
+.flash-visual.fit-cover img{object-fit:cover;}
+.flash-visual.fit-contain img{object-fit:contain;}
+.flash-visual.fit-stretch img{object-fit:fill;}
+.flash-visual-slide{position:absolute;inset:0;background-position:center;background-repeat:no-repeat;background-color:#FFFFFF;opacity:0;transition:opacity .8s ease;}
 .flash-visual-slide.active{opacity:1;}
 @media (max-width:720px){.flash{grid-template-columns:1fr;} .flash-visual{min-height:140px;order:-1;}}
 .flash-carousel{position:relative;overflow:hidden;border-radius:12px;}
@@ -322,14 +326,15 @@ img{max-width:100%;display:block;}
 .promo-banner-overlay{position:absolute;inset:0;background:rgba(0,0,0,.25);}
 
 /* ---------- Footer ---------- */
-#site-footer{background:#1F2328;color:#C9CBCE;margin-top:60px;}
+#site-footer{background:#F57224;color:#FFFFFF;margin-top:60px;}
 .footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:30px;padding:44px 0 24px;}
-.footer-grid h4{color:#fff;font-size:14px;margin:0 0 12px;}
-.footer-grid a{display:block;font-size:13.5px;padding:4px 0;color:#B7BABE;}
-.footer-grid a:hover{color:#fff;}
-.footer-bottom{border-top:1px solid #33373D;padding:16px 0;font-size:12.5px;color:#8A8D91;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.footer-grid h4{color:#FFFFFF;font-size:14px;margin:0 0 12px;}
+.footer-grid a{display:block;font-size:13.5px;padding:4px 0;color:#FFFFFF;}
+.footer-grid a:hover{color:#FFFFFF;text-decoration:underline;}
+.footer-bottom{border-top:1px solid rgba(255,255,255,.28);padding:16px 0;font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .social-row{display:flex;gap:10px;margin-top:10px;}
-.social-row a{width:32px;height:32px;border-radius:50%;background:#2C3036;display:flex;align-items:center;justify-content:center;font-size:13px;}
+.social-row a{width:32px;height:32px;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;font-size:13px;color:#FFFFFF;overflow:hidden;}
+.social-row a img{width:32px;height:32px;object-fit:contain;display:block;background:transparent;}
 @media (max-width:720px){.footer-grid{grid-template-columns:1fr 1fr;}}
 
 /* ---------- Empty / error states ---------- */
@@ -708,13 +713,7 @@ function seedCategories(){
   ];
 }
 function seedPages(){
-  return [
-    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About StoreX</h2><p>StoreX is a product discovery website that helps visitors find interesting products, useful deals and shopping links in one place.</p><p>We curate product information and send visitors to the relevant retailer page when they choose to shop.</p>',status:'published',style:{}},
-    {id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about StoreX, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}},
-    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>StoreX may use basic technical information such as browser, device and page-usage data to keep the website secure and improve the visitor experience.</p><p>When you follow a product link to Daraz or another retailer, that retailer may process your visit according to its own privacy policy and terms.</p><p>StoreX does not ask visitors to enter payment-card information on this website.</p>',status:'published',style:{}},
-    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms &amp; Conditions</h2><p>StoreX provides product discovery and links to third-party shopping pages. Product availability, specifications, delivery, returns, warranties and final prices are controlled by the retailer.</p><p>Please review the retailer product page carefully before placing an order.</p><p>By using this website, you agree to use it lawfully and understand that third-party websites have their own terms.</p>',status:'published',style:{}},
-    {id:'page-disclaimer',title:'Affiliate Disclosure',slug:'disclaimer',content:'<h2>Affiliate Disclosure</h2><p>Some product links on StoreX may be affiliate links. If you click an affiliate link and complete a qualifying purchase, StoreX may receive a commission at no additional cost to you.</p><p>We do not control the retailer\'s prices, stock, delivery or policies. Please verify all details on the retailer website before purchasing.</p>',status:'published',style:{}}
-  ];
+  return [{id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about StoreX, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}}];
 }
 // ============================================================
 // EDITABLE HTML-SOURCE SETTINGS
@@ -802,7 +801,7 @@ function buildDemoConfig(){
     hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
     footer:{about:'StoreX is a product discovery storefront. Replace the demo content with your own.',copyright:'© StoreX — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
-    nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},{id:'nav-contact',label:'Contact',url:'#/page/contact'},{id:'nav-privacy',label:'Privacy Policy',url:'#/page/privacy-policy'},{id:'nav-terms',label:'Terms',url:'#/page/terms'}],
+    nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},],
     darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
     sections:[
       {id:'sec-hero',type:'hero',visible:true,title:'Hero'},
@@ -818,13 +817,7 @@ function buildDemoConfig(){
 }
 
 function buildStoreXPages(){
-  return [
-    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About StoreX</h2><p>StoreX is a product discovery website that helps visitors find interesting products, useful deals and shopping links in one place.</p><p>We curate product information and send visitors to the relevant retailer page when they choose to shop.</p>',status:'published',style:{}},
-    {id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about StoreX, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}},
-    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>StoreX may use basic technical information such as browser, device and page-usage data to keep the website secure and improve the visitor experience.</p><p>When you follow a product link to Daraz or another retailer, that retailer may process your visit according to its own privacy policy and terms.</p><p>StoreX does not ask visitors to enter payment-card information on this website.</p>',status:'published',style:{}},
-    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms &amp; Conditions</h2><p>StoreX provides product discovery and links to third-party shopping pages. Product availability, specifications, delivery, returns, warranties and final prices are controlled by the retailer.</p><p>Please review the retailer product page carefully before placing an order.</p><p>By using this website, you agree to use it lawfully and understand that third-party websites have their own terms.</p>',status:'published',style:{}},
-    {id:'page-disclaimer',title:'Affiliate Disclosure',slug:'disclaimer',content:'<h2>Affiliate Disclosure</h2><p>Some product links on StoreX may be affiliate links. If you click an affiliate link and complete a qualifying purchase, StoreX may receive a commission at no additional cost to you.</p><p>We do not control the retailer\'s prices, stock, delivery or policies. Please verify all details on the retailer website before purchasing.</p>',status:'published',style:{}}
-  ];
+  return [{id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about StoreX, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}}];
 }
 
 async function boot(){
@@ -1345,7 +1338,7 @@ function initFlashVisuals(){
 }
 
 function flashSlideHtml(f){
-  const d=Object.assign({height:null,infoBg:'',textColor:'#FFFFFF',accentColor:'#F57224',imageFit:'cover'},f.display||{});
+  const d=Object.assign({height:null,infoBg:'#FFFFFF',textColor:'#1F2328',accentColor:'#F57224',imageFit:'cover'},f.display||{});
   const style=d.height?`height:${Math.max(140,Number(d.height)||360)}px;min-height:${Math.max(140,Number(d.height)||360)}px;`:''; 
   return `<a href="#/flash-sale/${esc(f.slug)}" class="flash-slide"><div class="flash" style="${style}">
     ${flashVisualHtml(flashImages(f))}
@@ -2116,7 +2109,11 @@ function openFlashSaleModal(id){
           <div class="field"><label>Info background</label><input type="text" name="infoBg" value="${esc((f.display||{}).infoBg||'')}" placeholder="#1F2328"></div>
           <div class="field"><label>Text color</label><input type="text" name="textColor" value="${esc((f.display||{}).textColor||'#FFFFFF')}"></div>
           <div class="field"><label>Accent color</label><input type="text" name="accentColor" value="${esc((f.display||{}).accentColor||'#F57224')}"></div>
-          <div class="field"><label>Image fit</label><select name="imageFit"><option value="cover">Cover</option><option value="contain">Contain</option><option value="100% 100%">Stretch</option></select></div>
+          <div class="field"><label>Image fit</label><select name="imageFit">
+<option value="cover" ${(f.display||{}).imageFit==='cover'?'selected':''}>Cover</option>
+<option value="contain" ${(f.display||{}).imageFit==='contain'?'selected':''}>Contain</option>
+<option value="100% 100%" ${(f.display||{}).imageFit==='100% 100%'?'selected':''}>Stretch</option>
+</select></div>
         </div>
       </fieldset>
       <fieldset class="seo-fieldset"><legend>SEO Settings</legend>
