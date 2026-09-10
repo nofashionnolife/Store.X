@@ -1,12 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
+<script>
+/* ================= FINDVAULT CUSTOMER CACHE =================
+   Fast repeat visits:
+   1) Last complete cloud state is stored in localStorage.
+   2) The cached storefront renders immediately on repeat visits.
+   3) Supabase is then read in the background and the screen is refreshed.
+   4) Realtime changes replace the current screen without requiring a manual reload.
+*/
+(function(){
+  'use strict';
+  const KEY = 'findvault.customer.snapshot.v4';
+  const MAX_AGE = 1000 * 60 * 60 * 24 * 30; // keep a snapshot for up to 30 days
+
+  window.FVCustomerCache = {
+    read(){
+      try{
+        const raw = localStorage.getItem(KEY);
+        if(!raw) return null;
+        const item = JSON.parse(raw);
+        if(!item || !item.data) return null;
+        return item;
+      }catch(e){ return null; }
+    },
+    write(data){
+      try{
+        localStorage.setItem(KEY, JSON.stringify({
+          version:4,
+          savedAt:Date.now(),
+          data:data
+        }));
+      }catch(e){
+        // Storage can be unavailable/full; the website must still work normally.
+      }
+    },
+    isUsable(item){
+      return !!(item && item.data && (Date.now() - (item.savedAt||0)) <= MAX_AGE);
+    }
+  };
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="WUxkcFCLbPaCLZE-jpALSdJ6fkcY30Ak4EnuW7x_ihY">
-<title>Store.X — Shop the Deals</title>
+<title>FindVault.store — Discover Products</title>
 <link id="site-favicon" rel="icon" type="image/png" href="">
 <link id="site-apple-icon" rel="apple-touch-icon" href="">
+
+<!-- ================= FINDVAULT SEO CONFIGURATION =================
+     FUTURE SEO EDIT LOCATION:
+     Edit the values inside SEO_CONFIG below. Keep the main description
+     natural and unique; use keywords only where they genuinely describe
+     the page. This configuration is also used by the dynamic SEO updater.
+=================================================================== -->
+<script>
+const SEO_CONFIG = {
+  siteName: "Find Vault",
+  siteUrl: "https://findvault.store/",
+  defaultTitle: "FindVault.store | Discover Products, Deals & Trending Finds",
+  defaultDescription: "FindVault.store is an online product discovery store featuring trending products, electronics, fashion, beauty, home and living essentials, gadgets, accessories and more. Discover useful products, compare options and visit trusted shopping destinations through our product links.",
+  keywords: "FindVault.store, Find Vault, online shopping, trending products, best products, product discovery, electronics, gadgets, mobile accessories, fashion, beauty products, home and living, kitchen products, lifestyle products, accessories, Daraz products, Daraz affiliate, online deals, trending deals, shopping deals, useful products, Pakistan online shopping",
+  robots: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
+  language: "en",
+  themeColor: "#F57224",
+  socialTitle: "FindVault.store | Discover Products, Deals & Trending Finds",
+  socialDescription: "Discover trending products, electronics, fashion, beauty, home essentials, gadgets and more at FindVault.store."
+};
+
+(function applyStaticSEO(){
+  const c = SEO_CONFIG;
+  document.title = c.defaultTitle;
+
+  const setMeta = (name, content, attr="name") => {
+    let el = document.head.querySelector(`meta[${attr}="${name}"]`);
+    if (!el) {
+      el = document.createElement("meta");
+      el.setAttribute(attr, name);
+      document.head.appendChild(el);
+    }
+    el.setAttribute("content", content);
+  };
+
+  setMeta("description", c.defaultDescription);
+  setMeta("keywords", c.keywords);
+  setMeta("robots", c.robots);
+  setMeta("og:title", c.socialTitle, "property");
+  setMeta("og:description", c.socialDescription, "property");
+  setMeta("og:type", "website", "property");
+  setMeta("og:url", c.siteUrl, "property");
+  setMeta("twitter:card", "summary_large_image");
+  setMeta("twitter:title", c.socialTitle);
+  setMeta("twitter:description", c.socialDescription);
+  setMeta("theme-color", c.themeColor);
+
+  let canonical = document.head.querySelector('link[rel="canonical"]');
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.appendChild(canonical);
+  }
+  canonical.href = c.siteUrl;
+
+  let lang = document.documentElement;
+  if (lang) lang.lang = c.language;
+})();
+</script>
+<!-- ================= END FINDVAULT SEO CONFIGURATION ================= -->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -250,7 +353,6 @@ img{max-width:100%;display:block;}
 .pd-tags{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;}
 .tag-pill{font-size:11.5px;background:#F2F0EB;padding:3px 9px;border-radius:20px;color:var(--ink-soft);}
 .pd-desc{color:var(--ink-soft);font-size:14.5px;margin:14px 0;white-space:pre-line;}
-.pd-price{font-size:28px;font-weight:700;margin:10px 0 4px;}
 
 /* ---------- Admin ---------- */
 .admin-shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh;background:#F3F2EF;}
@@ -325,16 +427,48 @@ img{max-width:100%;display:block;}
   .admin-main{padding:70px 16px 26px;}
 }
 </style>
+
+<script type="application/ld+json" id="findvault-schema">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://findvault.store/#website",
+      "url": "https://findvault.store/",
+      "name": "Find Vault",
+      "description": "A product discovery website featuring trending products, electronics, gadgets, fashion, beauty, home and living products, accessories and more.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://findvault.store/#organization",
+      "name": "Find Vault",
+      "url": "https://findvault.store/"
+    }
+  ]
+}
+</script>
+
 </head>
+
+<!--
+SEO DEPLOYMENT NOTE:
+For Google Search Console, also publish these two root-level files on your
+website hosting (not inside the HTML):
+  /robots.txt  -> User-agent: * | Allow: / | Sitemap: https://findvault.store/sitemap.xml
+  /sitemap.xml -> Generate a sitemap containing your real public URLs.
+-->
+
 <body>
 <div id="app"></div>
 <script>
 /* ============================================================
-   Store.X — single-file storefront + admin (client-side persistence)
+   Find Vault — single-file storefront + admin (client-side persistence)
    ============================================================ */
 
 /* ============================================================
-   Store.X — self-contained HTML configuration
+   Find Vault — self-contained HTML configuration
    ============================================================
    Supabase is the persistent cloud source of truth for admin changes.
    The values below are safe demo fallbacks when Supabase has no saved data yet.
@@ -414,7 +548,7 @@ function subscribeRealtime(){
         if(!row || !row.key) return;
         applyRemoteSetting(row.key,row.value).catch(err=>console.warn('Realtime update ignored:',err));
       }).subscribe();
-  }catch(err){ console.warn('Store.X realtime unavailable; normal cloud reads remain available.',err); }
+  }catch(err){ console.warn('Find Vault realtime unavailable; normal cloud reads remain available.',err); }
 }
 
 async function applyRemoteSetting(key,value){
@@ -432,8 +566,25 @@ async function applyRemoteSetting(key,value){
     }
     normalizeCloudState();
     applyTheme();
-    if(!route().startsWith('/admin-of-storex')) render();
-  }catch(err){ console.warn('Ignored malformed Store.X realtime payload:',key,err); }
+    try{
+      if(window.FVCustomerCache){
+        window.FVCustomerCache.write({
+          settings:SETTINGS,
+          products:PRODUCTS,
+          categories:CATEGORIES,
+          flashsales:FLASHSALES,
+          banners:BANNERS,
+          media:MEDIA,
+          pages:PAGES
+        });
+      }
+    }catch(e){}
+    if(!route().startsWith('/admin-of-storex')){
+      render();
+      applyMediaSizing();
+      initLazyMedia();
+    }
+  }catch(err){ console.warn('Ignored malformed Find Vault realtime payload:',key,err); }
 }
 
 async function loadKey(key,fallback){
@@ -444,7 +595,7 @@ async function loadKey(key,fallback){
     if(error) throw error;
     return data && data.value!=null ? JSON.parse(JSON.stringify(data.value)) : JSON.parse(JSON.stringify(fallback));
   }catch(e){
-    console.warn('Store.X cloud read failed for',key,e);
+    console.warn('Find Vault cloud read failed for',key,e);
     return JSON.parse(JSON.stringify(fallback));
   }
 }
@@ -459,7 +610,7 @@ async function saveKey(key,val){
     applyTheme(); render();
     return true;
   }catch(e){
-    console.error('Store.X cloud save failed:',e);
+    console.error('Find Vault cloud save failed:',e);
     toast('Cloud save failed: '+(e.message||'Unknown Supabase error'));
     return false;
   }
@@ -527,25 +678,26 @@ function mediaSrc(id){ if(!id)return ''; const m=MEDIA.find(x=>x.id===id); retur
 
 function demoImage(label,bg='#F2F0EB',fg='#1F2328'){
   const safe=String(label).replace(/[&<>"]/g,'');
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900"><rect width="900" height="900" rx="48" fill="${bg}"/><circle cx="450" cy="330" r="170" fill="${fg}" opacity=".10"/><rect x="205" y="245" width="490" height="270" rx="36" fill="${fg}" opacity=".16"/><circle cx="450" cy="380" r="92" fill="${fg}" opacity=".24"/><text x="450" y="610" text-anchor="middle" font-family="Arial" font-size="48" font-weight="700" fill="${fg}">${safe}</text><text x="450" y="665" text-anchor="middle" font-family="Arial" font-size="25" fill="${fg}" opacity=".7">STORE.X DEMO</text></svg>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900"><rect width="900" height="900" rx="48" fill="${bg}"/><circle cx="450" cy="330" r="170" fill="${fg}" opacity=".10"/><rect x="205" y="245" width="490" height="270" rx="36" fill="${fg}" opacity=".16"/><circle cx="450" cy="380" r="92" fill="${fg}" opacity=".24"/><text x="450" y="610" text-anchor="middle" font-family="Arial" font-size="48" font-weight="700" fill="${fg}">${safe}</text><text x="450" y="665" text-anchor="middle" font-family="Arial" font-size="25" fill="${fg}" opacity=".7">FIND VAULT</text></svg>`;
   return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
 }
 function seedCategories(){
   return [
-    {id:'cat-mobiles',name:'Mobiles',slug:'mobiles',description:'Phones, tablets and mobile accessories',image:'media-cat-1',icon:'📱',order:1,status:'visible',seo:{title:'Mobiles | Store.X',description:'Shop mobile products.',keywords:'mobiles, phones'}},
-    {id:'cat-fashion',name:'Fashion',slug:'fashion',description:'Trending styles for everyone',image:'media-cat-2',icon:'👕',order:2,status:'visible',seo:{title:'Fashion | Store.X',description:'Shop fashion deals.',keywords:'fashion, clothes'}},
-    {id:'cat-beauty',name:'Beauty',slug:'beauty',description:'Beauty and personal care',image:'media-cat-3',icon:'💄',order:3,status:'visible',seo:{title:'Beauty | Store.X',description:'Beauty products and deals.',keywords:'beauty, skincare'}},
-    {id:'cat-home',name:'Home & Living',slug:'home-living',description:'Useful products for your home',image:'media-cat-4',icon:'🏠',order:4,status:'visible',seo:{title:'Home & Living | Store.X',description:'Home products.',keywords:'home, living'}},
-    {id:'cat-electronics',name:'Electronics',slug:'electronics',description:'Smart gadgets and electronics',image:'media-cat-5',icon:'🎧',order:5,status:'visible',seo:{title:'Electronics | Store.X',description:'Electronics deals.',keywords:'electronics, gadgets'}},
-    {id:'cat-accessories',name:'Accessories',slug:'accessories',description:'Everyday accessories and essentials',image:'media-cat-6',icon:'⌚',order:6,status:'visible',seo:{title:'Accessories | Store.X',description:'Accessories deals.',keywords:'accessories'}}
+    {id:'cat-mobiles',name:'Mobiles',slug:'mobiles',description:'Phones, tablets and mobile accessories',image:'media-cat-1',icon:'📱',order:1,status:'visible',seo:{title:'Mobiles | Find Vault',description:'Shop mobile products.',keywords:'mobiles, phones'}},
+    {id:'cat-fashion',name:'Fashion',slug:'fashion',description:'Trending styles for everyone',image:'media-cat-2',icon:'👕',order:2,status:'visible',seo:{title:'Fashion | Find Vault',description:'Shop fashion deals.',keywords:'fashion, clothes'}},
+    {id:'cat-beauty',name:'Beauty',slug:'beauty',description:'Beauty and personal care',image:'media-cat-3',icon:'💄',order:3,status:'visible',seo:{title:'Beauty | Find Vault',description:'Beauty products and deals.',keywords:'beauty, skincare'}},
+    {id:'cat-home',name:'Home & Living',slug:'home-living',description:'Useful products for your home',image:'media-cat-4',icon:'🏠',order:4,status:'visible',seo:{title:'Home & Living | Find Vault',description:'Home products.',keywords:'home, living'}},
+    {id:'cat-electronics',name:'Electronics',slug:'electronics',description:'Smart gadgets and electronics',image:'media-cat-5',icon:'🎧',order:5,status:'visible',seo:{title:'Electronics | Find Vault',description:'Electronics deals.',keywords:'electronics, gadgets'}},
+    {id:'cat-accessories',name:'Accessories',slug:'accessories',description:'Everyday accessories and essentials',image:'media-cat-6',icon:'⌚',order:6,status:'visible',seo:{title:'Accessories | Find Vault',description:'Accessories deals.',keywords:'accessories'}}
   ];
 }
 function seedPages(){
   return [
-    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Store.X</h2><p>Store.X helps shoppers discover useful products, trending deals and special offers in one clean storefront.</p><p>Edit this content from the Custom Pages admin control.</p>',status:'published',style:{}},    {id:'page-contact',title:'Contact',slug:'contact',content:'<h2>Contact Store.X</h2><p>Add your contact details, WhatsApp number, email or social links here.</p>',status:'published',style:{}},
-    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>Store.X admin changes are stored in Supabase.</p>',status:'published',style:{}},
-    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms & Conditions</h2><p>Store.X is a product discovery storefront. Review each destination before purchasing.</p>',status:'published',style:{}},
-    {id:'page-disclaimer',title:'Disclaimer',slug:'disclaimer',content:'<h2>Disclaimer</h2><p>Demo product listings are examples. Replace them with your own products, links and content before publishing.</p>',status:'published',style:{}}
+    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Find Vault</h2><p>FindVault.store is a product discovery website that helps visitors find interesting products, useful deals and shopping links in one place.</p><p>We curate product information and send visitors to the relevant retailer page when they choose to shop.</p>',status:'published',style:{}},
+    {id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about FindVault.store, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}},
+    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>FindVault.store may use basic technical information such as browser, device and page-usage data to keep the website secure and improve the visitor experience.</p><p>When you follow a product link to Daraz or another retailer, that retailer may process your visit according to its own privacy policy and terms.</p><p>Find Vault does not ask visitors to enter payment-card information on this website.</p>',status:'published',style:{}},
+    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms &amp; Conditions</h2><p>FindVault.store provides product discovery and links to third-party shopping pages. Product availability, specifications, delivery, returns, warranties and final prices are controlled by the retailer.</p><p>Please review the retailer product page carefully before placing an order.</p><p>By using this website, you agree to use it lawfully and understand that third-party websites have their own terms.</p>',status:'published',style:{}},
+    {id:'page-disclaimer',title:'Affiliate Disclosure',slug:'disclaimer',content:'<h2>Affiliate Disclosure</h2><p>Some product links on FindVault.store may be affiliate links. If you click an affiliate link and complete a qualifying purchase, Find Vault may receive a commission at no additional cost to you.</p><p>We do not control the retailer\'s prices, stock, delivery or policies. Please verify all details on the retailer website before purchasing.</p>',status:'published',style:{}}
   ];
 }
 // ============================================================
@@ -566,10 +718,10 @@ const KEYS = {
 };
 
 const DEFAULT_SETTINGS = {
-  siteName:'Store.X',
+  siteName:'Find Vault',
   logo:'', logoLink:'#/', logoWidth:150,
   primaryColor:'#F57224', headerBg:'#FFFFFF', headerText:'#1F2328',
-  favicon:'', gaId:'', darazStoreUrl:'',
+  favicon:'', gaId:'', darazStoreUrl:'https://www.daraz.pk/',
   hero:{
     enabled:true, image:'', desktopImage:'', mobileImage:'',
     title:'Shop the Deals', subtitle:'Discover great products and deals.',
@@ -579,7 +731,7 @@ const DEFAULT_SETTINGS = {
     buttonBgColor:'#F57224', buttonTextColor:'#FFFFFF',
     buttonPaddingY:12, buttonPaddingX:22, buttonMarginTop:0, buttonWidth:'', buttonAlign:'left'
   },
-  footer:{about:'Store.X is a product discovery site.',copyright:'© Store.X',social:{}},
+  footer:{about:'FindVault.store helps visitors discover products and shop through selected retailer links.',copyright:'© FindVault.store',social:{}},
   darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
   search:{trending:[],maxSuggestions:10,letterSuggestions:{}},
   nav:[], sections:[],
@@ -588,7 +740,7 @@ const DEFAULT_SETTINGS = {
 
 function buildDemoConfig(){
   const media=[
-    {id:'media-logo',name:'Demo logo',dataUrl:'https://placehold.co/300x80/1F2328/FFFFFF?text=STORE.X'},
+    {id:'media-logo',name:'Demo logo',dataUrl:'https://placehold.co/300x80/1F2328/FFFFFF?text=FIND VAULT'},
     {id:'media-hero',name:'Hero demo',dataUrl:'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=78'},
     {id:'media-cat-1',name:'Mobiles',dataUrl:'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=700&q=72'},
     {id:'media-cat-2',name:'Fashion',dataUrl:'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=700&q=72'},
@@ -610,7 +762,7 @@ function buildDemoConfig(){
     images:[img],mainImage:img,darazUrl:'https://www.daraz.pk/',category:cat,tags:title.toLowerCase().split(' ').concat(['demo','deal']),
     price,oldPrice,discount,badge:discount?'-'+discount+'%':'',sku:'DEMO-'+id,status:'published',featured:!!flags.featured,trending:!!flags.trending,
     newArrival:!!flags.newArrival,bestSeller:!!flags.bestSeller,order:flags.order||1,
-    seo:{slug:slugify(title),title:title+' | Store.X',description:desc,keywords:title.toLowerCase()},clicks:0,views:0
+    seo:{slug:slugify(title),title:title+' | Find Vault',description:desc,keywords:title.toLowerCase()},clicks:0,views:0
   });
   const products=[
     product('p-phone','Nova X Pro Smartphone','6.7-inch display • 256GB • fast charging',74999,89999,17,'cat-mobiles','media-phone',{featured:true,trending:true,bestSeller:true,order:1}),
@@ -621,18 +773,18 @@ function buildDemoConfig(){
     product('p-lamp','Smart Desk Lamp','Adjustable LED desk lamp with touch control',2799,3499,20,'cat-home','media-lamp',{newArrival:true,order:6})
   ];
   const flash={
-    id:'flash-demo',title:'Weekend Flash Sale',slug:'weekend-flash-sale',subtitle:'Limited-time prices on trending picks.',description:'Demo flash sale for Store.X.',
+    id:'flash-demo',title:'Weekend Flash Sale',slug:'weekend-flash-sale',subtitle:'Limited-time prices on trending picks.',description:'Demo flash sale for Find Vault.',
     status:'active',start:new Date(Date.now()-3600000).toISOString(),end:new Date(Date.now()+2*86400000).toISOString(),
     banner:'media-flash',banner2:null,banner3:null,products:products.slice(0,4).map(x=>({type:'existing',productId:x.id})),
-    display:{height:360,infoBg:'#1F2328',textColor:'#FFFFFF',accentColor:'#F57224',imageFit:'cover'},seo:{title:'Weekend Flash Sale | Store.X',keywords:'flash sale,deals',description:'Limited-time Store.X deals.'}
+    display:{height:360,infoBg:'#1F2328',textColor:'#FFFFFF',accentColor:'#F57224',imageFit:'cover'},seo:{title:'Weekend Flash Sale | Find Vault',keywords:'flash sale,deals',description:'Limited-time Find Vault deals.'}
   };
   const banner={id:'banner-demo',image:'media-banner',desktopImage:'media-banner',mobileImage:'media-banner',heroSlider:true,heading:'Free Delivery on Demo Deals',description:'Explore featured products and update every detail from the Admin Panel.',buttonText:'Shop Now',buttonUrl:'#/category/all',visible:true,display:{height:260,radius:12,overlay:.28,padding:30,headingColor:'#FFFFFF',descriptionColor:'#FFFFFF',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',buttonWidth:'',imageFit:'cover'}};
   const settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   Object.assign(settings,{
-    siteName:'Store.X Demo',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
+    siteName:'Find Vault',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
     favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',
     hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
-    footer:{about:'Store.X is a demo product discovery storefront. Replace the demo content with your own.',copyright:'© Store.X — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
+    footer:{about:'Find Vault is a product discovery storefront. Replace the demo content with your own.',copyright:'© Find Vault — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
     nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},{id:'nav-contact',label:'Contact',url:'#/page/contact'},{id:'nav-privacy',label:'Privacy Policy',url:'#/page/privacy-policy'},{id:'nav-terms',label:'Terms',url:'#/page/terms'}],
     darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
@@ -648,9 +800,49 @@ function buildDemoConfig(){
   });
   return {settings,products,categories:seedCategories(),flashsales:[flash],banners:[banner],media,pages:seedPages()};
 }
+
+function buildFindVaultPages(){
+  return [
+    {id:'page-about',title:'About Us',slug:'about',content:'<h2>About Find Vault</h2><p>FindVault.store is a product discovery website that helps visitors find interesting products, useful deals and shopping links in one place.</p><p>We curate product information and send visitors to the relevant retailer page when they choose to shop.</p>',status:'published',style:{}},
+    {id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about FindVault.store, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}},
+    {id:'page-privacy',title:'Privacy Policy',slug:'privacy-policy',content:'<h2>Privacy Policy</h2><p>FindVault.store may use basic technical information such as browser, device and page-usage data to keep the website secure and improve the visitor experience.</p><p>When you follow a product link to Daraz or another retailer, that retailer may process your visit according to its own privacy policy and terms.</p><p>Find Vault does not ask visitors to enter payment-card information on this website.</p>',status:'published',style:{}},
+    {id:'page-terms',title:'Terms & Conditions',slug:'terms',content:'<h2>Terms &amp; Conditions</h2><p>FindVault.store provides product discovery and links to third-party shopping pages. Product availability, specifications, delivery, returns, warranties and final prices are controlled by the retailer.</p><p>Please review the retailer product page carefully before placing an order.</p><p>By using this website, you agree to use it lawfully and understand that third-party websites have their own terms.</p>',status:'published',style:{}},
+    {id:'page-disclaimer',title:'Affiliate Disclosure',slug:'disclaimer',content:'<h2>Affiliate Disclosure</h2><p>Some product links on FindVault.store may be affiliate links. If you click an affiliate link and complete a qualifying purchase, Find Vault may receive a commission at no additional cost to you.</p><p>We do not control the retailer\'s prices, stock, delivery or policies. Please verify all details on the retailer website before purchasing.</p>',status:'published',style:{}}
+  ];
+}
+
 async function boot(){
   const demo=buildDemoConfig();
-  try{ await initSupabase(); }catch(e){ console.error('Supabase initialization failed:',e); toast('Supabase connection failed. Store.X is running in safe demo mode; admin saves are disabled.'); }
+
+  /* ---------- CACHE-FIRST STARTUP ----------
+     If this browser has a previous complete snapshot, render it first.
+     Cloud reads below still run and become authoritative afterwards. */
+  let __fvCachedSnapshot = null;
+  try{
+    __fvCachedSnapshot = window.FVCustomerCache && window.FVCustomerCache.read();
+    if(window.FVCustomerCache && window.FVCustomerCache.isUsable(__fvCachedSnapshot)){
+      const c = __fvCachedSnapshot.data || {};
+      if(c.settings) SETTINGS = c.settings;
+      if(Array.isArray(c.products)) PRODUCTS = c.products;
+      if(Array.isArray(c.categories)) CATEGORIES = c.categories;
+      if(Array.isArray(c.flashsales)) FLASHSALES = c.flashsales;
+      if(Array.isArray(c.banners)) BANNERS = c.banners;
+      if(Array.isArray(c.media)) MEDIA = c.media;
+      if(Array.isArray(c.pages)) PAGES = c.pages;
+
+      normalizeCloudState();
+      applyTheme();
+      injectGA();
+      render();
+      applyMediaSizing();
+      initLazyMedia();
+      window.FV_CACHE_FIRST_RENDERED = true;
+    }
+  }catch(e){
+    console.warn('Find Vault cache-first startup skipped:', e);
+  }
+
+  try{ await initSupabase(); }catch(e){ console.error('Supabase initialization failed:',e); toast('Supabase connection failed. Find Vault is running in safe demo mode; admin saves are disabled.'); }
 
   SETTINGS = await loadKey(KEYS.settings, demo.settings);
   SETTINGS = Object.assign({}, DEFAULT_SETTINGS, SETTINGS, {
@@ -668,6 +860,13 @@ async function boot(){
   BANNERS = await loadKey(KEYS.banners, demo.banners);
   MEDIA = await loadKey(KEYS.media, demo.media);
   PAGES = await loadKey(KEYS.pages, demo.pages);
+  // Find Vault branding/content is fixed for this version of the storefront.
+  SETTINGS.siteName = 'Find Vault';
+  const standardPages = buildFindVaultPages();
+  standardPages.forEach(sp=>{
+    const existing = PAGES.find(pg=>pg.slug===sp.slug);
+    if(existing) Object.assign(existing, sp); else PAGES.push(sp);
+  });
   applyTheme();
   injectGA();
   window.addEventListener('hashchange', render);
@@ -675,6 +874,22 @@ async function boot(){
   applyMediaSizing();
   initLazyMedia();
 }
+
+
+  /* Save the complete authoritative cloud state for the next visit. */
+  try{
+    if(window.FVCustomerCache){
+      window.FVCustomerCache.write({
+        settings:SETTINGS,
+        products:PRODUCTS,
+        categories:CATEGORIES,
+        flashsales:FLASHSALES,
+        banners:BANNERS,
+        media:MEDIA,
+        pages:PAGES
+      });
+    }
+  }catch(e){ console.warn('Find Vault cache write skipped:', e); }
 
 function loadLazyBackground(el){
   if(!el || el.dataset.lazyLoaded==='1') return;
@@ -708,7 +923,7 @@ function applyTheme(){
   document.documentElement.style.setProperty('--primary', SETTINGS.primaryColor||'#F57224');
   document.documentElement.style.setProperty('--header-bg', SETTINGS.headerBg||'#FFFFFF');
   document.documentElement.style.setProperty('--header-text', SETTINGS.headerText||'#1F2328');
-  document.title = SETTINGS.siteName || 'Store.X';
+  document.title = SETTINGS.siteName || 'Find Vault';
   applyFavicon();
   applyMediaSizing();
 }
@@ -741,8 +956,37 @@ function setMetaTag(name, content){
   if(!el){ el=document.createElement('meta'); el.setAttribute('name',name); document.head.appendChild(el); }
   el.setAttribute('content', content||'');
 }
+
+/* ---------- FindVault dynamic SEO helper ----------
+   FUTURE SEO LOCATION: SEO_CONFIG above is the main SEO control panel.
+   Page-specific SEO can also be entered through the Admin > Pages SEO fields.
+---------------------------------------------------- */
+function applyFindVaultRouteSEO(pageTitle, pageDescription, pageKeywords, canonicalPath){
+  const title = pageTitle ? `${pageTitle} | FindVault.store` : SEO_CONFIG.defaultTitle;
+  const desc = pageDescription || SEO_CONFIG.defaultDescription;
+  const keywords = pageKeywords || SEO_CONFIG.keywords;
+  document.title = title;
+
+  const set = (name, content, attr="name") => {
+    let el=document.head.querySelector(`meta[${attr}="${name}"]`);
+    if(!el){ el=document.createElement("meta"); el.setAttribute(attr,name); document.head.appendChild(el); }
+    el.setAttribute("content", content || "");
+  };
+  set("description", desc);
+  set("keywords", keywords);
+  set("og:title", title, "property");
+  set("og:description", desc, "property");
+  set("og:url", canonicalPath ? `https://findvault.store/${canonicalPath.replace(/^\//,"")}` : SEO_CONFIG.siteUrl, "property");
+  set("twitter:title", title);
+  set("twitter:description", desc);
+
+  let canonical=document.head.querySelector('link[rel="canonical"]');
+  if(!canonical){ canonical=document.createElement("link"); canonical.rel="canonical"; document.head.appendChild(canonical); }
+  canonical.href=canonicalPath ? `https://findvault.store/${canonicalPath.replace(/^\//,"")}` : SEO_CONFIG.siteUrl;
+}
+
 function applySEO(seo, fallbackTitle, fallbackDesc){
-  const siteName = (SETTINGS&&SETTINGS.siteName)||'Store.X';
+  const siteName = (SETTINGS&&SETTINGS.siteName)||'Find Vault';
   document.title = (seo&&seo.title) ? seo.title : (fallbackTitle? fallbackTitle+' | '+siteName : siteName);
   setMetaTag('description', (seo&&seo.description) || fallbackDesc || (SETTINGS&&SETTINGS.footer&&SETTINGS.footer.about) || '');
   setMetaTag('keywords', (seo&&seo.keywords) || '');
@@ -773,7 +1017,7 @@ function showModal(contentHtml){
 /* ================= ROUTER ================= */
 function route(){ return location.hash.replace(/^#/,'') || '/'; }
 
-let STOREX_RENDERING=false;
+let FINDVAULT_RENDERING=false;
 function normalizeCloudState(){
   if(!Array.isArray(PRODUCTS)) PRODUCTS=[];
   if(!Array.isArray(CATEGORIES)) CATEGORIES=[];
@@ -787,16 +1031,16 @@ function normalizeCloudState(){
 function safeRenderFallback(message){
   const app=document.getElementById('app');
   if(!app) return;
-  app.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center"><div><h2 style="margin:0 0 8px">Store.X is recovering</h2><p style="margin:0;color:#666">'+esc(message||'A temporary page error occurred.')+'</p><button class="btn" style="margin-top:16px" onclick="window.StoreXRecover()">Reload storefront</button></div></div>';
+  app.innerHTML='<div style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center"><div><h2 style="margin:0 0 8px">Find Vault is recovering</h2><p style="margin:0;color:#666">'+esc(message||'A temporary page error occurred.')+'</p><button class="btn" style="margin-top:16px" onclick="window.StoreXRecover()">Reload storefront</button></div></div>';
 }
 function render(){
-  if(STOREX_RENDERING) return;
-  STOREX_RENDERING=true;
+  if(FINDVAULT_RENDERING) return;
+  FINDVAULT_RENDERING=true;
   try{
     normalizeCloudState();
     const h = route();
     const app = document.getElementById('app');
-    if(!app) throw new Error('Store.X app container is missing.');
+    if(!app) throw new Error('Find Vault app container is missing.');
     if(h.startsWith('/admin-of-storex')){
       app.innerHTML = renderAdminRoot();
       wireAdminEvents();
@@ -820,10 +1064,10 @@ function render(){
     initFlashVisuals();
     initLazyMedia();
   }catch(err){
-    console.error('Store.X render error:',err);
+    console.error('Find Vault render error:',err);
     safeRenderFallback('The storefront hit a temporary rendering error. Your cloud data was not deleted.');
   }finally{
-    STOREX_RENDERING=false;
+    FINDVAULT_RENDERING=false;
   }
 }
 window.StoreXRecover=function(){ location.reload(); };
@@ -1179,11 +1423,9 @@ function renderCollectionSection(sec){
     <div class="spotlight-card">
       <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="spotlight-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>
       <div class="spotlight-body">
-        ${p.badge?`<span class="card-badge" style="position:static;display:inline-block;width:fit-content;">${esc(p.badge)}</span>`:''}
         <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}"><h3>${esc(p.shortTitle||p.title)}</h3></a>
         ${p.shortDesc?`<p style="color:var(--ink-soft);margin:0;">${esc(p.shortDesc)}</p>`:''}
-        ${p.price? `<div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.oldPrice?`<span class="price-old">${fmtMoney(p.oldPrice)}</span>`:''}${p.discount?`<span class="discount-pill">-${esc(p.discount)}%</span>`:''}</div>`:''}
-        <button class="btn" style="margin-top:6px;width:fit-content;" onclick="buyOnDaraz('${p.id}')">Buy on Daraz</button>
+        <button class="btn" style="margin-top:6px;width:fit-content;" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
       </div>
     </div></section>`;
   }
@@ -1249,13 +1491,11 @@ function renderDarazPromoSection(){
 function renderProductCard(p){
   const img = p.mainImage ? mediaSrc(p.mainImage) : (p.images&&p.images[0]?mediaSrc(p.images[0]):'');
   return `<div class="card">
-    ${p.badge?`<span class="card-badge">${esc(p.badge)}</span>`:''}
     <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>
     <div class="card-body">
       <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-title">${esc(p.shortTitle||p.title)}</a>
       ${p.shortDesc?`<div class="card-desc">${esc(p.shortDesc)}</div>`:''}
-      ${p.price? `<div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.oldPrice?`<span class="price-old">${fmtMoney(p.oldPrice)}</span>`:''}${p.discount?`<span class="discount-pill">-${esc(p.discount)}%</span>`:''}</div>`:''}
-      <button class="card-cta" onclick="buyOnDaraz('${p.id}')">Buy on Daraz</button>
+      <button class="card-cta" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
     </div>
   </div>`;
 }
@@ -1291,11 +1531,9 @@ function renderProductPage(key){
       </div>
       <div>
         <h1 class="pd-title">${esc(p.title)}</h1>
-        ${p.badge?`<span class="discount-pill" style="background:#FFF1E6;color:var(--primary-dark);">${esc(p.badge)}</span>`:''}
-        ${p.price?`<div class="pd-price">${fmtMoney(p.price)} ${p.oldPrice?`<span class="price-old" style="font-size:16px;">${fmtMoney(p.oldPrice)}</span>`:''} ${p.discount?`<span class="discount-pill">-${esc(p.discount)}%</span>`:''}</div>`:''}
         <div class="pd-desc">${esc(p.fullDesc||p.shortDesc||'')}</div>
         ${p.tags&&p.tags.length?`<div class="pd-tags">${p.tags.map(t=>`<span class="tag-pill">${esc(t)}</span>`).join('')}</div>`:''}
-        <button class="btn" style="width:100%;justify-content:center;font-size:15px;padding:14px;" onclick="buyOnDaraz('${p.id}')">Buy on Daraz</button>
+        <button class="btn" style="width:100%;justify-content:center;font-size:15px;padding:14px;" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
         ${cat?`<p style="font-size:12.5px;color:var(--ink-soft);margin-top:14px;">Category: <a href="#/category/${esc(cat.slug)}" style="color:var(--primary);">${esc(cat.name)}</a></p>`:''}
       </div>
     </div>
@@ -1351,8 +1589,7 @@ function renderFlashSalePage(slug){
       <div class="card-body">
         <div class="card-title">${esc(c.title)}</div>
         ${c.desc?`<div class="card-desc">${esc(c.desc)}</div>`:''}
-        ${c.price?`<div class="price-row"><span class="price">${fmtMoney(c.price)}</span>${c.oldPrice?`<span class="price-old">${fmtMoney(c.oldPrice)}</span>`:''}${c.discount?`<span class="discount-pill">-${esc(c.discount)}%</span>`:''}</div>`:''}
-        <button class="card-cta" onclick="buyOnDaraz(null,'${esc(c.darazUrl||'')}')">Buy on Daraz</button>
+        <button class="card-cta" onclick="buyOnDaraz(null,'${esc(c.darazUrl||'')}')">Buy Now</button>
       </div>
     </div>`;
   }).join('');
@@ -1423,8 +1660,8 @@ function wireStorefrontEvents(){
   // Most controls use inline handlers, but delegation covers links/forms that are
   // dynamically replaced and makes local-file Chrome usage more reliable.
   const app=document.getElementById('app');
-  if(!app || app.dataset.storexWired==='1') return;
-  app.dataset.storexWired='1';
+  if(!app || app.dataset.findvaultWired==='1') return;
+  app.dataset.findvaultWired='1';
   app.addEventListener('click',e=>{
     const a=e.target.closest('a[href^="#/"]');
     if(a){
@@ -1464,7 +1701,7 @@ async function supabaseAdminLogin(form){
     const {error}=await supabaseClient.auth.signInWithPassword({email,password});
     if(error) throw error;
     const ok=await refreshAdminStatus();
-    if(!ok){ await supabaseClient.auth.signOut(); throw new Error('This account is authenticated but is not listed as a Store.X admin.'); }
+    if(!ok){ await supabaseClient.auth.signOut(); throw new Error('This account is authenticated but is not listed as a Find Vault admin.'); }
     toast('Admin signed in ✓'); render();
   }catch(e){toast('Admin login failed: '+(e.message||'Invalid credentials'));}
 }
@@ -1593,7 +1830,7 @@ function adminImageControls(label,current,onSelectJs,previewId,extraNote=''){
 function adminProducts(){
   return `<div class="admin-topbar"><h1>Products</h1><button class="btn" onclick="openProductModal()">+ Add Product</button></div>
   <div class="admin-card">
-  ${PRODUCTS.length? `<table class="admin-table"><thead><tr><th>Image</th><th>Title</th><th>Category</th><th>Price</th><th>Status</th><th>Flags</th><th>Actions</th></tr></thead><tbody>
+  ${PRODUCTS.length? `<table class="admin-table"><thead><tr><th>Image</th><th>Title</th><th>Category</th><th>Status</th><th>Flags</th><th>Actions</th></tr></thead><tbody>
     ${PRODUCTS.map(p=>{
       const cat = CATEGORIES.find(c=>c.id===p.category);
       const flags = ['featured','trending','newArrival','bestSeller'].filter(f=>p[f]).map(f=>({featured:'Featured',trending:'Trending',newArrival:'New',bestSeller:'Best seller'}[f])).join(', ');
@@ -1601,7 +1838,6 @@ function adminProducts(){
         <td><img src="${mediaSrc(p.mainImage||(p.images&&p.images[0]))||''}" alt=""></td>
         <td>${esc(p.title)}</td>
         <td>${cat?esc(cat.name):'\u2014'}</td>
-        <td>${fmtMoney(p.price)}</td>
         <td><span class="badge-status ${p.status==='published'?'on':'off'}">${p.status}</span></td>
         <td style="font-size:12px;color:var(--ink-soft);">${flags||'\u2014'}</td>
         <td><div class="row-actions">
@@ -1643,9 +1879,6 @@ function openProductModal(id){
         <div class="field full"><label>Full description</label><textarea name="fullDesc">${esc(p.fullDesc)}</textarea></div>
         <div class="field"><label>Category</label><select name="category"><option value="">\u2014 None \u2014</option>${catOptions}</select></div>
         <div class="field"><label>Tags (comma separated)</label><input type="text" name="tags" value="${esc((p.tags||[]).join(', '))}"></div>
-        <div class="field"><label>Price</label><input type="number" name="price" value="${esc(p.price)}"></div>
-        <div class="field"><label>Old price</label><input type="number" name="oldPrice" value="${esc(p.oldPrice)}"></div>
-        <div class="field"><label>Discount %</label><input type="number" name="discount" value="${esc(p.discount)}"></div>
         <div class="field"><label>Badge (e.g. "Hot", "-20%")</label><input type="text" name="badge" value="${esc(p.badge)}"></div>
         <div class="field full"><label>Daraz product URL *</label><input required type="url" name="darazUrl" placeholder="https://www.daraz.pk/products/..." value="${esc(p.darazUrl)}"></div>
         <div class="field"><label>Status</label><select name="status"><option value="published" ${p.status==='published'?'selected':''}>Published</option><option value="hidden" ${p.status==='hidden'?'selected':''}>Hidden</option></select></div>
@@ -1908,7 +2141,7 @@ function addCustomFlashProduct(id, isNew){
   const title = prompt('Custom product title:'); if(!title) return;
   const price = prompt('Price (optional):','') || '';
   const darazUrl = prompt('Daraz URL:','') || '';
-  f.products = f.products||[]; f.products.push({type:'custom', title, price: price?Number(price):'', darazUrl, image:null, desc:'', oldPrice:'', discount:'', badge:''});
+  f.products = f.products||[]; f.products.push({type:'custom', title, darazUrl, image:null, desc:'', badge:''});
   document.getElementById('flash-products-list').innerHTML = renderFlashProductsList(f);
 }
 
@@ -2469,7 +2702,7 @@ function saveGeneralSettings(form){
 function wireAdminEvents(){}
 
 /* ---------- Long-session / network recovery ---------- */
-let STOREX_RECOVERY_TIMER=null;
+let FINDVAULT_RECOVERY_TIMER=null;
 async function refreshCloudStateAfterResume(){
   if(!supabaseClient || !SUPABASE_READY || document.hidden) return;
   try{
@@ -2485,24 +2718,51 @@ async function refreshCloudStateAfterResume(){
     applyTheme();
     render();
     subscribeRealtime();
-  }catch(err){ console.warn('Store.X resume sync skipped:',err); }
+  }catch(err){ console.warn('Find Vault resume sync skipped:',err); }
 }
 window.addEventListener('online',refreshCloudStateAfterResume);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) refreshCloudStateAfterResume(); });
-STOREX_RECOVERY_TIMER=setInterval(()=>{ if(!document.hidden) refreshCloudStateAfterResume(); },15*60*1000);
+FINDVAULT_RECOVERY_TIMER=setInterval(()=>{ if(!document.hidden) refreshCloudStateAfterResume(); },15*60*1000);
+
+
+/* Cross-tab cache sync: if another tab receives a cloud update, this tab
+   refreshes from the newest local snapshot without a hard browser reload. */
+(function(){
+  window.addEventListener('storage', function(e){
+    if(e.key !== 'findvault.customer.snapshot.v4' || !e.newValue) return;
+    if(location.hash && location.hash.startsWith('#/admin-of-storex')) return;
+    try{
+      const item=JSON.parse(e.newValue);
+      const c=item && item.data;
+      if(!c) return;
+      if(c.settings) SETTINGS=c.settings;
+      if(Array.isArray(c.products)) PRODUCTS=c.products;
+      if(Array.isArray(c.categories)) CATEGORIES=c.categories;
+      if(Array.isArray(c.flashsales)) FLASHSALES=c.flashsales;
+      if(Array.isArray(c.banners)) BANNERS=c.banners;
+      if(Array.isArray(c.media)) MEDIA=c.media;
+      if(Array.isArray(c.pages)) PAGES=c.pages;
+      normalizeCloudState();
+      applyTheme();
+      render();
+      applyMediaSizing();
+      initLazyMedia();
+    }catch(err){ console.warn('Find Vault cross-tab cache sync skipped:',err); }
+  });
+})();
 
 /* ================= INIT ================= */
 window.addEventListener('error', function(e){
-  console.error('Store.X runtime error:', e.error || e.message);
+  console.error('Find Vault runtime error:', e.error || e.message);
 });
 window.addEventListener('unhandledrejection', function(e){
-  console.error('Store.X promise error:', e.reason);
+  console.error('Find Vault promise error:', e.reason);
 });
 boot().catch(function(err){
-  console.error('Store.X boot failed:', err);
+  console.error('Find Vault boot failed:', err);
   const app=document.getElementById('app');
   if(app){
-    app.innerHTML='<div style=\"min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Store.X could not start</h2><p style=\"margin:0;color:#666\">The HTML file has been protected from a blank white screen. Check the browser console for the exact error.</p></div></div>';
+    app.innerHTML='<div style=\"min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Find Vault could not start</h2><p style=\"margin:0;color:#666\">The HTML file has been protected from a blank white screen. Check the browser console for the exact error.</p></div></div>';
   }
 });
 </script>
