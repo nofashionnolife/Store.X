@@ -771,7 +771,7 @@ const DEFAULT_SETTINGS = {
 
 function buildDemoConfig(){
   const media=[
-    {id:'media-logo',name:'Demo logo',dataUrl:'https://placehold.co/300x80/1F2328/FFFFFF?text=StoreX'},
+    {id:'media-logo',name:'Demo logo',dataUrl:'https://i.ibb.co/20d0YX78/1789053253807.png'},
     {id:'media-hero',name:'Hero demo',dataUrl:'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=78'},
     {id:'media-cat-1',name:'Mobiles',dataUrl:'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=700&q=72'},
     {id:'media-cat-2',name:'Fashion',dataUrl:'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=700&q=72'},
@@ -852,11 +852,12 @@ async function submitStoreOrder(productId, qty, customer){
   const calc=calculateOrder(p,quantity);
   if(stock>0 && quantity>stock) throw new Error('Requested quantity is greater than available stock.');
   if(!supabaseClient || !SUPABASE_READY) throw new Error('Order service is temporarily unavailable.');
-  const payload={product_id:p.id,product_title:p.title,product_sku:p.sku||null,quantity,unit_price:calc.unitPrice,original_price:calc.originalPrice,special_price:calc.specialPrice,discount_percent:calc.discountPercent,delivery_charges:calc.delivery,discount_amount:calc.discountAmount,total_amount:calc.total,customer_name:customer.name,customer_phone:customer.phone,customer_email:customer.email||null,city:customer.city,customer_address:customer.address,status:'pending',promotion:calc.promotion||null};
-  /* Important: do not request the inserted row back here. Public visitors have INSERT permission but intentionally do not have SELECT permission on orders. */
+  const orderNumber='SX-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,8).toUpperCase();
+  const payload={order_number:orderNumber,product_id:p.id,product_title:p.title,product_sku:p.sku||null,quantity,unit_price:calc.unitPrice,original_price:calc.originalPrice,special_price:calc.specialPrice,discount_percent:calc.discountPercent,delivery_charges:calc.delivery,discount_amount:calc.discountAmount,total_amount:calc.total,customer_name:customer.name,customer_phone:customer.phone,customer_email:customer.email||null,city:customer.city,customer_address:customer.address,status:'pending',promotion:calc.promotion||null};
+  /* Public visitors may INSERT orders but may not SELECT the orders table. */
   const {error}=await supabaseClient.from('storex_orders').insert(payload);
   if(error) throw error;
-  return true;
+  return {order_number:orderNumber,created_at:new Date().toISOString()};
 }
 function calculateOrder(p,quantity){
   const original=Number(p.originalPrice ?? p.oldPrice ?? p.price)||0;
@@ -903,17 +904,78 @@ function updateOrderTotal(productId){
 async function submitOrderForm(productId){
   const form=document.getElementById('order-form'); if(!form)return; const btn=document.getElementById('order-submit-btn'); const fd=new FormData(form); const p=PRODUCTS.find(x=>x.id===productId); if(!p)return;
   const stock=Math.max(0,Number(p.stock)||0), qty=Number(fd.get('quantity'))||1; if(qty<1||qty>stock){toast('Quantity must be between 1 and available stock.');return;}
+  const customer={name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:String(fd.get('email')||'').trim(),city:String(fd.get('city')||'').trim(),address:String(fd.get('address')||'').trim()};
+  if(!customer.name||!customer.phone||!customer.city||!customer.address){toast('Please complete all required fields.');return;}
   if(btn){btn.disabled=true;btn.textContent='Submitting...';}
-  try{ await submitStoreOrder(productId,qty,{name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:String(fd.get('email')||'').trim(),city:String(fd.get('city')||'').trim(),address:String(fd.get('address')||'').trim()}); closeModal(); toast('Order submitted successfully ✓'); }
-  catch(e){console.error(e);toast('Order failed: '+(e.message||'Please try again'));if(btn){btn.disabled=false;btn.textContent='Submit Order';}}
+  try{
+    const result=await submitStoreOrder(productId,qty,customer);
+    closeModal();
+    showOrderInvoice(result,p,qty,customer);
+  }catch(e){console.error(e);toast('Order failed: '+(e.message||'Please try again'));if(btn){btn.disabled=false;btn.textContent='Submit Order';}}
 }
+function storexLogoHtml(){
+  return SETTINGS.logo ? `<img src="${mediaSrc(SETTINGS.logo)}" alt="${esc(SETTINGS.siteName||'StoreX')} logo" style="max-width:180px;max-height:58px;object-fit:contain;display:block;margin:0 auto;">` : `<div style="font-size:30px;font-weight:900;letter-spacing:-1.5px;color:#111;line-height:1;">${esc(SETTINGS.siteName||'Store.X')}</div>`;
+}
+function showOrderInvoice(order,p,qty,customer){
+  const total=calculateOrder(p,qty);
+  const orderNo=order&&order.order_number ? order.order_number : (order&&order.id ? String(order.id) : 'Pending');
+  const created=order&&order.created_at ? new Date(order.created_at).toLocaleString('en-PK') : new Date().toLocaleString('en-PK');
+  showModal(`<div class="order-invoice" style="background:#fff;border-radius:14px;padding:22px;max-width:620px;margin:auto;box-shadow:0 12px 40px rgba(0,0,0,.12);">
+    <div style="text-align:center;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:16px;">${storexLogoHtml()}<div style="margin-top:14px;font-size:24px;font-weight:800;">Your order has been submitted successfully.</div><p style="margin:8px 0 0;color:var(--ink-soft);">Thank you for placing your order.</p></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;font-size:13px;"><div><b>Order Number</b><br>${esc(orderNo)}</div><div><b>Order Date</b><br>${esc(created)}</div><div><b>Status</b><br><span class="badge-status">Pending</span></div><div><b>Customer</b><br>${esc(customer.name)}</div></div>
+    <div style="border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;"><b>${esc(p.title)}</b><div style="display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:13px;"><span>Quantity: ${qty}</span><span>Unit price: ${money(total.unitPrice)}</span></div><div style="display:flex;justify-content:space-between;gap:10px;margin-top:5px;font-size:13px;"><span>Delivery</span><span>${total.delivery?money(total.delivery):'FREE'}</span></div><div style="display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:16px;font-weight:800;border-top:1px solid var(--line);padding-top:9px;"><span>Total</span><span>${money(total.total)}</span></div></div>
+    <div style="display:grid;gap:5px;font-size:13px;margin-bottom:16px;"><b>Delivery Details</b><span>Name: ${esc(customer.name)}</span><span>Phone: ${esc(customer.phone)}</span>${customer.email?`<span>Email: ${esc(customer.email)}</span>`:''}<span>City: ${esc(customer.city)}</span><span>Address: ${esc(customer.address)}</span></div>
+    <div style="background:#F7F7F5;border:1px solid var(--line);border-radius:10px;padding:13px;text-align:center;font-weight:700;">Save your order number for tracking your order.</div>
+    <div class="modal-close-row"><button class="btn" onclick="closeModal()">Done</button><button class="btn ghost" onclick="window.print()">Print / Save Invoice</button></div>
+  </div>`);
+}
+
 function money(n){return 'Rs. '+Number(n||0).toLocaleString('en-PK',{maximumFractionDigits:2});}
-function formatOrderStatus(s){return s==='confirmed'?'Confirmed':s==='cancelled'?'Cancelled':'Pending';}
+function formatOrderStatus(s){
+  const v=String(s||'pending').toLowerCase();
+  return v==='confirmed'?'Confirmed':v==='ready_to_ship'?'Ready to Ship':v==='shipped'?'Shipped':v==='delivered'?'Delivered':v==='cancelled'?'Cancelled':'Pending';
+}
+function customerCanCancelStatus(status){
+  const v=String(status||'pending').toLowerCase();
+  return ['pending','confirmed','shipped'].includes(v);
+}
+function renderTrackOrder(){
+  return `<div class="container" style="padding:30px 20px;max-width:760px;"><div class="customer-card"><div class="crumb"><a href="#/">Home</a> / Track Your Order</div><h1>Track Your Order</h1><p style="color:var(--ink-soft);">Enter your order number, full name and phone number to securely view your order status.</p><form id="track-order-form" onsubmit="event.preventDefault();trackOrder();"><div class="form-grid"><div class="field full"><label>Order Number *</label><input name="order_number" required placeholder="e.g. SX-ABC1234567" autocomplete="off"></div><div class="field"><label>Full name *</label><input name="name" required autocomplete="name"></div><div class="field"><label>Phone number *</label><input name="phone" required type="tel" autocomplete="tel"></div></div><div class="form-actions"><button id="track-order-btn" type="submit" class="btn">Track Order</button></div></form></div><div id="track-order-result" style="margin-top:18px;"></div></div>`;
+}
+async function trackOrder(){
+  const form=document.getElementById('track-order-form'), result=document.getElementById('track-order-result'), btn=document.getElementById('track-order-btn'); if(!form||!result)return;
+  const fd=new FormData(form), orderNumber=String(fd.get('order_number')||'').trim(), name=String(fd.get('name')||'').trim(), phone=String(fd.get('phone')||'').trim();
+  if(btn){btn.disabled=true;btn.textContent='Verifying...';}
+  result.innerHTML='';
+  try{
+    const {data,error}=await supabaseClient.rpc('storex_track_order',{p_order_number:orderNumber,p_customer_name:name,p_customer_phone:phone});
+    if(error)throw error;
+    if(!data||data.found===false) throw new Error('Order not found or verification details do not match.');
+    result.innerHTML=renderTrackedOrder(data);
+  }catch(e){result.innerHTML=`<div class="customer-card" style="border:1px solid #e3b4b4;"><b>Unable to verify this order.</b><p style="margin:6px 0 0;color:var(--ink-soft);">${esc(e.message||'Please check your order number, name and phone number.')}</p></div>`;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Track Order';}}
+}
+function renderTrackedOrder(o){
+  const status=String(o.status||'pending').toLowerCase(), canCancel=customerCanCancelStatus(status);
+  const statusNote=status==='ready_to_ship'?'Your order is ready to ship. Customer cancellation is no longer available at this stage.':status==='shipped'?'Your order has been shipped.':'Your order is being processed.';
+  return `<div class="customer-card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;"><div><h2 style="margin:0;">Order ${esc(o.order_number||'')}</h2><p style="margin:5px 0;color:var(--ink-soft);">${esc(o.product_title||'')}</p></div><span class="badge-status ${status==='confirmed'||status==='ready_to_ship'||status==='shipped'||status==='delivered'?'on':status==='cancelled'?'off':''}">${esc(formatOrderStatus(status))}</span></div><div style="display:grid;gap:6px;margin-top:16px;font-size:13px;"><span><b>Customer:</b> ${esc(o.customer_name||'')}</span><span><b>Phone:</b> ${esc(o.customer_phone||'')}</span><span><b>City:</b> ${esc(o.city||'')}</span><span><b>Quantity:</b> ${Number(o.quantity)||0}</span><span><b>Total:</b> ${money(o.total_amount)}</span><span><b>Delivery Address:</b> ${esc(o.customer_address||'')}</span></div><div style="margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#F7F7F5;">${esc(statusNote)}</div>${canCancel?`<div class="modal-close-row" style="justify-content:flex-start;"><button class="btn danger" onclick="cancelTrackedOrder('${esc(o.order_number)}')">Cancel Order</button></div>`:''}</div>`;
+}
+async function cancelTrackedOrder(orderNumber){
+  if(!confirm('Are you sure you want to cancel this order?'))return;
+  const name=String(document.querySelector('#track-order-form [name="name"]')?.value||'').trim(), phone=String(document.querySelector('#track-order-form [name="phone"]')?.value||'').trim();
+  try{
+    const {data,error}=await supabaseClient.rpc('storex_cancel_customer_order',{p_order_number:orderNumber,p_customer_name:name,p_customer_phone:phone});
+    if(error)throw error;
+    if(!data||data.success!==true) throw new Error(data?.message||'This order cannot be cancelled at its current status.');
+    toast('Order cancelled successfully.');
+    await trackOrder();
+  }catch(e){toast(e.message||'Order cancellation failed.');}
+}
 
 async function boot(){
   const demo=buildDemoConfig();
   // Instant first paint: show the local/demo structure immediately; cloud sync continues in background.
-  if(!SETTINGS){ SETTINGS=JSON.parse(JSON.stringify(demo.settings)); SETTINGS.hero=Object.assign({},SETTINGS.hero,{enabled:false,image:'',desktopImage:'',mobileImage:''}); PRODUCTS=[]; CATEGORIES=[]; FLASHSALES=[]; BANNERS=[]; MEDIA=[]; PAGES=[]; normalizeCloudState(); applyTheme(); render(); }
+  if(!SETTINGS){ SETTINGS=JSON.parse(JSON.stringify(demo.settings)); SETTINGS.hero=Object.assign({},SETTINGS.hero,{enabled:false,image:'',desktopImage:'https://i.ibb.co/G49FQ5xP/file-00000000e96c81faaf9169926ac5bd36.png',mobileImage:'https://i.ibb.co/FL22c0Nw/file-000000002b24824386351d44be0c160c.png'}); PRODUCTS=[]; CATEGORIES=[]; FLASHSALES=[]; BANNERS=[]; MEDIA=[]; PAGES=[]; normalizeCloudState(); applyTheme(); render(); }
 
   /* ---------- CACHE-FIRST STARTUP ----------
      If this browser has a previous complete snapshot, render it first.
@@ -1127,6 +1189,7 @@ function render(){
     else if(h.startsWith('/flash-sale/')){ body = renderFlashSalePage(decodeURIComponent(h.split('/flash-sale/')[1])); }
     else if(h==='/flash-sale'){ body = renderFlashSaleIndex(); }
     else if(h.startsWith('/search')){ const q = new URLSearchParams(h.split('?')[1]||'').get('q')||''; body = renderSearchPage(q); }
+    else if(h==='/track-order'){ body = renderTrackOrder(); }
     else if(h.startsWith('/page/')){ body = renderCustomPage(decodeURIComponent(h.split('/page/')[1])); }
     else { body = renderNotFound(); }
     app.innerHTML = renderHeader() + '<main>'+body+'</main>' + renderFooter() + renderMobileDrawer();
@@ -1258,6 +1321,7 @@ function renderMobileDrawer(){
       <button class="mobile-drawer-close" onclick="MOBILE_DRAWER_OPEN=false;render();">&times;</button>
       <div style="clear:both;height:8px;"></div>
       ${navLinks}
+      <a href="#/track-order" onclick="MOBILE_DRAWER_OPEN=false;">Track Your Order</a>
       ${categoryMenu}
     </div>
   </div>`;
@@ -2011,12 +2075,22 @@ function saveProductForm(pid, isNew){
 
 
 /* ---------- Orders ---------- */
+function adminOrderActions(o){
+  const s=String(o.status||'pending').toLowerCase();
+  const btns=[];
+  if(s==='pending') btns.push(`<button class="btn small" onclick="updateOrderStatus('${o.id}','confirmed')">Confirm</button>`);
+  if(s==='confirmed') btns.push(`<button class="btn small" onclick="updateOrderStatus('${o.id}','ready_to_ship')">Ready to Ship</button>`);
+  if(s==='ready_to_ship') btns.push(`<button class="btn small" onclick="updateOrderStatus('${o.id}','shipped')">Shipped</button>`);
+  if(s==='shipped') btns.push(`<button class="btn small" onclick="updateOrderStatus('${o.id}','delivered')">Delivered</button>`);
+  if(s!=='cancelled'&&s!=='delivered') btns.push(`<button class="btn small danger" onclick="updateOrderStatus('${o.id}','cancelled')">Cancel</button>`);
+  return btns.join(' ');
+}
 function adminOrders(){
   if(!ORDERS.length) return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div class="empty-state"><div class="icon">📦</div><h3>No orders yet</h3><p>Orders submitted from the customer storefront will appear here.</p></div></div>`;
-  return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div style="overflow:auto"><table class="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>City</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>⋮</th></tr></thead><tbody>${ORDERS.map(o=>`<tr><td>${esc(String(o.id).slice(0,8))}<br><small>${o.created_at?new Date(o.created_at).toLocaleString():''}</small></td><td>${esc(o.customer_name||'')}<br>${esc(o.customer_phone||'')}</td><td>${esc(o.city||'')}</td><td>${esc(o.product_title||'')}</td><td>${Number(o.quantity)||0}</td><td>${money(o.total_amount)}</td><td><span class="badge-status ${o.status==='confirmed'?'on':o.status==='cancelled'?'off':''}">${formatOrderStatus(o.status)}</span></td><td><button class="btn small ghost" onclick="showOrderDetails('${o.id}')">⋮ Details</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div style="overflow:auto"><table class="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>City</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>${ORDERS.map(o=>`<tr><td><b>${esc(o.order_number||String(o.id||'').slice(0,8))}</b><br><small>${o.created_at?new Date(o.created_at).toLocaleString():''}</small></td><td>${esc(o.customer_name||'')}<br>${esc(o.customer_phone||'')}</td><td>${esc(o.city||'')}</td><td>${esc(o.product_title||'')}</td><td>${Number(o.quantity)||0}</td><td>${money(o.total_amount)}</td><td><span class="badge-status ${o.status==='confirmed'||o.status==='ready_to_ship'||o.status==='shipped'||o.status==='delivered'?'on':o.status==='cancelled'?'off':''}">${formatOrderStatus(o.status)}</span></td><td><div class="row-actions"><button class="btn small ghost" onclick="showOrderDetails('${o.id}')">Details</button>${adminOrderActions(o)}</div></td></tr>`).join('')}</tbody></table></div></div>`;
 }
-function showOrderDetails(id){ const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o)return; showModal(`<h2>Order Details</h2><div style="display:grid;gap:7px;font-size:13px"><b>${esc(o.product_title||'')}</b><span>Name: ${esc(o.customer_name||'')}</span><span>Phone: ${esc(o.customer_phone||'')}</span><span>Email: ${esc(o.customer_email||'')}</span><span>City: ${esc(o.city||'')}</span><span>Full delivery address: ${esc(o.customer_address||'')}</span><span>Quantity: ${Number(o.quantity)||0}</span><span>Delivery: ${money(o.delivery_charges)}</span><span>Total: <b>${money(o.total_amount)}</b></span><span>Status: ${formatOrderStatus(o.status)}</span></div><div class="modal-close-row">${o.status==='pending'?`<button class="btn" onclick="updateOrderStatus('${o.id}','confirmed')">Confirm Order</button><button class="btn danger" onclick="updateOrderStatus('${o.id}','cancelled')">Cancel Order</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`); }
-async function updateOrderStatus(id,status){ if(!SUPABASE_ADMIN||!supabaseClient)return; try{ const {error}=await supabaseClient.from('storex_orders').update({status,updated_at:new Date().toISOString()}).eq('id',id); if(error)throw error; const o=ORDERS.find(x=>String(x.id)===String(id)); if(o)o.status=status; closeModal(); render(); toast(status==='confirmed'?'Order confirmed ✓':'Order cancelled'); }catch(e){toast('Order update failed: '+(e.message||'Unknown error'));} }
+function showOrderDetails(id){ const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o)return; showModal(`<h2>Order Details</h2><div style="display:grid;gap:7px;font-size:13px"><b>Order: ${esc(o.order_number||o.id||'')}</b><b>${esc(o.product_title||'')}</b><span>Name: ${esc(o.customer_name||'')}</span><span>Phone: ${esc(o.customer_phone||'')}</span><span>Email: ${esc(o.customer_email||'')}</span><span>City: ${esc(o.city||'')}</span><span>Full delivery address: ${esc(o.customer_address||'')}</span><span>Quantity: ${Number(o.quantity)||0}</span><span>Delivery: ${money(o.delivery_charges)}</span><span>Total: <b>${money(o.total_amount)}</b></span><span>Status: ${formatOrderStatus(o.status)}</span></div><div class="modal-close-row">${adminOrderActions(o)}<button class="btn ghost" onclick="closeModal()">Close</button></div>`); }
+async function updateOrderStatus(id,status){ if(!SUPABASE_ADMIN||!supabaseClient)return; try{ const allowed=['pending','confirmed','ready_to_ship','shipped','delivered','cancelled']; if(!allowed.includes(status))throw new Error('Invalid order status.'); const {error}=await supabaseClient.from('storex_orders').update({status,updated_at:new Date().toISOString()}).eq('id',id); if(error)throw error; const o=ORDERS.find(x=>String(x.id)===String(id)); if(o)o.status=status; closeModal(); await loadOrders(); render(); toast('Order status updated: '+formatOrderStatus(status)); }catch(e){toast('Order update failed: '+(e.message||'Unknown error'));} }
 
 /* ---------- Categories ---------- */
 function adminCategories(){
