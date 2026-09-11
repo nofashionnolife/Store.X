@@ -12,10 +12,10 @@
 */
 (function(){
   'use strict';
-  const KEY = 'StoreX.customer.snapshot.v4';
+  const KEY = 'StoreX.customer.snapshot.v5';
   const MAX_AGE = 1000 * 60 * 60 * 24 * 30; // keep a snapshot for up to 30 days
 
-  window.FVCustomerCache = {
+  window.StoreXCustomerCache = {
     read(){
       try{
         const raw = localStorage.getItem(KEY);
@@ -62,7 +62,7 @@ const SEO_CONFIG = {
   siteUrl: "https://StoreX/",
   defaultTitle: "StoreX | Discover Products, Deals & Trending Finds",
   defaultDescription: "StoreX is an online product discovery store featuring trending products, electronics, fashion, beauty, home and living essentials, gadgets, accessories and more. Discover useful products, compare options and visit trusted shopping destinations through our product links.",
-  keywords: "StoreX, StoreX, online shopping, trending products, best products, product discovery, electronics, gadgets, mobile accessories, fashion, beauty products, home and living, kitchen products, lifestyle products, accessories, Daraz products, Daraz affiliate, online deals, trending deals, shopping deals, useful products, Pakistan online shopping",
+  keywords: "StoreX, StoreX, online shopping, trending products, best products, product discovery, electronics, gadgets, mobile accessories, fashion, beauty products, home and living, kitchen products, lifestyle products, accessories, online deals, trending deals, shopping deals, useful products, Pakistan online shopping",
   robots: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
   language: "en",
   themeColor: "#F57224",
@@ -218,13 +218,6 @@ img{max-width:100%;display:block;}
 .btn.ghost{background:none;color:var(--ink);border:1.5px solid var(--line);}
 .btn.danger{background:#B3261E;color:#fff;}
 .btn.danger:hover{background:#8f1e18;}
-.daraz-promo{display:flex;align-items:center;gap:14px;border:1px solid rgba(0,0,0,.08);overflow:hidden;box-shadow:0 4px 14px rgba(20,20,20,.05);}
-.daraz-promo-image{width:76px;height:58px;flex:0 0 76px;border-radius:7px;overflow:hidden;background:#fff;display:flex;align-items:center;justify-content:center;}
-.daraz-promo-image img{width:100%;height:100%;object-fit:cover;}
-.daraz-promo-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;}
-.daraz-promo-copy strong{font-size:16px;line-height:1.2;}
-.daraz-promo-copy span{font-size:12.5px;opacity:.72;}
-@media(max-width:480px){.daraz-promo{gap:9px;padding:10px!important;}.daraz-promo-image{width:52px;height:42px;flex-basis:52px;}.daraz-promo-copy strong{font-size:13px;}.daraz-promo-copy span{font-size:10.5px;}.daraz-promo .btn{padding:7px 10px;font-size:11px;}}
 
 /* ---------- Sections ---------- */
 .section{padding:44px 0;}
@@ -308,6 +301,7 @@ img{max-width:100%;display:block;}
 .flash-visual.fit-contain img{object-fit:contain;}
 .flash-visual.fit-stretch img{object-fit:fill;}
 .flash-visual-slide{position:absolute;inset:0;background-position:center;background-repeat:no-repeat;background-color:#FFFFFF;opacity:0;transition:opacity .8s ease;}
+.flash-visual-slide img{width:100%;height:100%;display:block;object-fit:cover;object-position:center;}
 .flash-visual-slide.active{opacity:1;}
 @media (max-width:720px){.flash{grid-template-columns:1fr;} .flash-visual{min-height:140px;order:-1;}}
 .flash-carousel{position:relative;overflow:hidden;border-radius:12px;}
@@ -431,6 +425,15 @@ img{max-width:100%;display:block;}
   .admin-sidebar .group-label{display:block;}
   .admin-main{padding:70px 16px 26px;}
 }
+
+/* StoreX unified media + navigation fixes */
+html{scroll-behavior:auto;}
+.card-img,.cat-icon,.pd-main-img,.spotlight-img{width:100%;}
+.card-img{aspect-ratio:var(--product-media-ratio,1/1)!important;height:auto!important;}
+.card-img img,.cat-icon img,.pd-main-img img,.spotlight-img img{width:100%;height:100%;object-fit:cover;}
+.flash{aspect-ratio:3/2!important;height:auto!important;min-height:0!important;}
+.flash-visual{height:100%!important;min-height:0!important;}
+@media(max-width:720px){.flash{height:auto!important;min-height:0!important;}.flash-visual{height:100%!important;}}
 </style>
 
 <script type="application/ld+json" id="StoreX-schema">
@@ -469,7 +472,7 @@ website hosting (not inside the HTML):
 <div id="StoreX-loading" aria-live="polite" role="status">
   <div class="StoreX-loading-card">
     <div class="StoreX-loading-image-wrap">
-      <img class="StoreX-loading-image" src="https://placehold.co/300x80/1F2328/FFFFFF?text=FIND+VAULT" alt="StoreX">
+      <img class="StoreX-loading-image" src="data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27900%27 height=%27240%27%3E%3Crect width=%27900%27 height=%27240%27 rx=%2736%27 fill=%27%231F2328%27/%3E%3Ctext x=%27450%27 y=%27145%27 text-anchor=%27middle%27 font-family=%27Arial%27 font-size=%2780%27 font-weight=%27700%27 fill=%27%23FFFFFF%27%3EStoreX%3C/text%3E%3C/svg%3E" alt="StoreX">
     </div>
     <div class="StoreX-loading-text">Please wait while the website is loading.</div>
   </div>
@@ -499,7 +502,8 @@ website hosting (not inside the HTML):
    ============================================================ */
 
 // ---------- Runtime/UI state ----------
-let SETTINGS=null, PRODUCTS=[], CATEGORIES=[], FLASHSALES=[], BANNERS=[], MEDIA=[], PAGES=[];
+let SETTINGS=null, PRODUCTS=[], CATEGORIES=[], FLASHSALES=[], BANNERS=[], MEDIA=[], PAGES=[], ORDERS=[];
+let ORDER_ADMIN_BUSY=false;
 let MOBILE_DRAWER_OPEN=false, MOBILE_SEARCH_OPEN=false;
 let ADMIN_UNLOCKED=false, ADMIN_VIEW='dashboard', ADMIN_DRAWER_OPEN=false;
 let PD_ACTIVE_IMG=0, DRAG_IDX=null;
@@ -588,8 +592,8 @@ async function applyRemoteSetting(key,value){
     normalizeCloudState();
     applyTheme();
     try{
-      if(window.FVCustomerCache){
-        window.FVCustomerCache.write({
+      if(window.StoreXCustomerCache){
+        window.StoreXCustomerCache.write({
           settings:SETTINGS,
           products:PRODUCTS,
           categories:CATEGORIES,
@@ -736,7 +740,7 @@ const DEFAULT_SETTINGS = {
   siteName:'StoreX',
   logo:'', logoLink:'#/', logoWidth:150,
   primaryColor:'#F57224', headerBg:'#FFFFFF', headerText:'#1F2328',
-  favicon:'', gaId:'', darazStoreUrl:'https://www.daraz.pk/',
+  favicon:'', gaId:'', darazStoreUrl:'',
   hero:{
     enabled:true, image:'', desktopImage:'', mobileImage:'',
     title:'Shop the Deals', subtitle:'Discover great products and deals.',
@@ -746,11 +750,12 @@ const DEFAULT_SETTINGS = {
     buttonBgColor:'#F57224', buttonTextColor:'#FFFFFF',
     buttonPaddingY:12, buttonPaddingX:22, buttonMarginTop:0, buttonWidth:'', buttonAlign:'left'
   },
-  footer:{about:'StoreX helps visitors discover products and shop through selected retailer links.',copyright:'© StoreX',social:{}},
-  darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
+  footer:{about:'StoreX — direct shopping from our own store.',copyright:'© StoreX',social:{}},
+  darazPromo:{enabled:false,title:'',description:'',buttonText:'',buttonUrl:'',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
   search:{trending:[],maxSuggestions:10,letterSuggestions:{}},
   nav:[], sections:[],
-  mediaSizing:{categoryHeight:130,productRatio:'1/1',flashHeight:360,promoHeight:260}
+  mediaSizing:{categoryHeight:130,productRatio:'1/1',flashHeight:360,promoHeight:260},
+   homeCategoryIds:[]
 };
 
 function buildDemoConfig(){
@@ -774,8 +779,8 @@ function buildDemoConfig(){
   ];
   const product=(id,title,desc,price,oldPrice,discount,cat,img,flags={})=>({
     id,title,shortTitle:title,shortDesc:desc,fullDesc:desc+'. Demo listing — replace this with your real product details.',
-    images:[img],mainImage:img,darazUrl:'https://www.daraz.pk/',category:cat,tags:title.toLowerCase().split(' ').concat(['demo','deal']),
-    price,oldPrice,discount,badge:discount?'-'+discount+'%':'',sku:'DEMO-'+id,status:'published',featured:!!flags.featured,trending:!!flags.trending,
+    images:[img],mainImage:img,category:cat,tags:title.toLowerCase().split(' ').concat(['demo','deal']),
+    price,oldPrice,originalPrice:oldPrice,specialPrice:price,stock:20,deliveryCharges:200,discount,badge:discount?'-'+discount+'%':'',promotion:{freeDelivery:false,freeDeliveryQty:0,percentOff:0,percentOffQty:0,buyQty:0,freeQty:0},sku:'DEMO-'+id,status:'published',featured:!!flags.featured,trending:!!flags.trending,
     newArrival:!!flags.newArrival,bestSeller:!!flags.bestSeller,order:flags.order||1,
     seo:{slug:slugify(title),title:title+' | StoreX',description:desc,keywords:title.toLowerCase()},clicks:0,views:0
   });
@@ -797,19 +802,18 @@ function buildDemoConfig(){
   const settings=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   Object.assign(settings,{
     siteName:'StoreX',logo:'media-logo',logoLink:'#/',logoWidth:150,primaryColor:'#F57224',headerBg:'#FFFFFF',headerText:'#1F2328',
-    favicon:'media-logo',darazStoreUrl:'https://www.daraz.pk/',gaId:'',
+    favicon:'media-logo',darazStoreUrl:'',gaId:'',
     hero:{enabled:true,image:'media-hero',desktopImage:'media-hero',mobileImage:'media-hero',title:'Shop the Deals',subtitle:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',heading:'Shop the Deals',subheading:'Demo products, flash sales and categories — fully controlled from the Admin Panel.',buttonText:'Shop Now',buttonLink:'#/category/all',buttonUrl:'#/category/all',height:360,overlay:.30,align:'center',buttonBgColor:'#F57224',buttonTextColor:'#FFFFFF',buttonPaddingY:12,buttonPaddingX:22,buttonMarginTop:0,buttonWidth:'',buttonAlign:'left'},
-    footer:{about:'StoreX is a product discovery storefront. Replace the demo content with your own.',copyright:'© StoreX — Demo',social:{facebook:'#',instagram:'#',tiktok:'#'}},
+    footer:{about:'StoreX — direct shopping from our own store.',copyright:'© StoreX',social:{}},
     search:{trending:['smartphone','earbuds','smartwatch','fashion','flash sale','home decor'],maxSuggestions:10,letterSuggestions:{}},
     nav:[{id:'nav-home',label:'Home',url:'#/'},{id:'nav-products',label:'All Products',url:'#/category/all'},{id:'nav-flash',label:'Flash Sale',url:'#/flash-sale'},],
-    darazPromo:{enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'media-banner',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},
+    darazPromo:{enabled:false},
     sections:[
       {id:'sec-hero',type:'hero',visible:true,title:'Hero'},
       {id:'sec-cats',type:'categories',visible:true,title:'Shop by Category',subtitle:'Browse popular departments'},
       {id:'sec-products',type:'productCollection',visible:true,title:'Featured Deals',subtitle:'Hand-picked demo products',config:{filter:'featured',count:6,layout:'grid',columns:3,productId:''}},
       {id:'sec-flash',type:'flashsale',visible:true,title:'Flash Sale',subtitle:'Limited-time demo offers',config:{flashSaleId:'flash-demo'}},
       {id:'sec-banner',type:'banner',visible:true,title:'Promo Banner',subtitle:'',config:{bannerId:'banner-demo'}},
-      {id:'sec-daraz',type:'darazPromo',visible:true,title:'Daraz Store Strip',subtitle:''},
       {id:'sec-trending',type:'productCollection',visible:true,title:'Trending Now',subtitle:'Popular demo picks',config:{filter:'trending',count:6,layout:'grid',columns:3,productId:''}}
     ]
   });
@@ -820,16 +824,91 @@ function buildStoreXPages(){
   return [{id:'page-contact',title:'Contact Us',slug:'contact',content:'<h2>Contact Us</h2><p>For questions about StoreX, product links, corrections or general feedback, please use the contact method provided by the site owner.</p><p>We aim to keep product information and links useful and up to date.</p>',status:'published',style:{}}];
 }
 
+async function loadOrders(){
+  ORDERS=[];
+  if(!SUPABASE_READY || !supabaseClient) return;
+  try{
+    const {data,error}=await supabaseClient.from('storex_orders').select('*').order('created_at',{ascending:false});
+    if(error){ console.warn('StoreX orders read skipped:',error); return; }
+    if(Array.isArray(data)) ORDERS=data;
+  }catch(e){ console.warn('StoreX orders read skipped:',e); }
+}
+async function submitStoreOrder(productId, qty, customer){
+  const p=PRODUCTS.find(x=>x.id===productId);
+  if(!p) throw new Error('Product not found.');
+  const stock=Math.max(0,Number(p.stock)||0);
+  const quantity=Math.max(1,Math.min(Number(qty)||1,stock||Number(qty)||1));
+  const calc=calculateOrder(p,quantity);
+  if(stock>0 && quantity>stock) throw new Error('Requested quantity is greater than available stock.');
+  if(!supabaseClient || !SUPABASE_READY) throw new Error('Order service is temporarily unavailable.');
+  const payload={product_id:p.id,product_title:p.title,product_sku:p.sku||null,quantity,unit_price:calc.unitPrice,original_price:calc.originalPrice,special_price:calc.specialPrice,discount_percent:calc.discountPercent,delivery_charges:calc.delivery,discount_amount:calc.discountAmount,total_amount:calc.total,customer_name:customer.name,customer_phone:customer.phone,customer_email:customer.email||null,customer_address:customer.address,status:'pending',promotion:calc.promotion||null};
+  const {data,error}=await supabaseClient.from('storex_orders').insert(payload).select('*').single();
+  if(error) throw error;
+  return data;
+}
+function calculateOrder(p,quantity){
+  const original=Number(p.originalPrice ?? p.oldPrice ?? p.price)||0;
+  const special=Number(p.specialPrice ?? p.price)||original;
+  const unit=Math.min(original||special,special||original);
+  const discountAmount=Math.max(0,(original-unit)*quantity);
+  const discountPercent=original>0?Math.round((original-unit)/original*100):0;
+  const promo=p.promotion||{};
+  let delivery=Math.max(0,Number(p.deliveryCharges)||0);
+  let promoDiscount=0, promoText='';
+  if(promo.freeDelivery && quantity>=Math.max(1,Number(promo.freeDeliveryQty)||1)){delivery=0;promoText='Free delivery';}
+  if(Number(promo.percentOff)>0 && quantity>=Math.max(1,Number(promo.percentOffQty)||1)){
+    promoDiscount=Math.round(unit*quantity*Number(promo.percentOff)/100*100)/100; promoText=(promo.percentOff+'% off');
+  }
+  let bonus=0;
+  if(Number(promo.buyQty)>0 && Number(promo.freeQty)>0 && quantity>=Number(promo.buyQty)){
+    bonus=Math.floor(quantity/Number(promo.buyQty))*Number(promo.freeQty); promoText=(promoText?promoText+' + ':'')+'Buy '+promo.buyQty+' Get '+promo.freeQty+' Free';
+  }
+  const subtotal=Math.max(0,unit*quantity-promoDiscount);
+  return {originalPrice:original,specialPrice:special,unitPrice:unit,discountAmount:Math.round((discountAmount+promoDiscount)*100)/100,discountPercent,promotion:promoText||null,bonusQuantity:bonus,delivery,total:Math.round((subtotal+delivery)*100)/100};
+}
+function openOrderModal(productId){
+  const p=PRODUCTS.find(x=>x.id===productId); if(!p)return;
+  const stock=Math.max(0,Number(p.stock)||0); if(stock<=0){toast('This product is out of stock.');return;}
+  const calc=calculateOrder(p,1);
+  showModal(`<h2>Place Order</h2><p style="margin-top:0;color:var(--ink-soft);">${esc(p.title)}</p>
+    <form id="order-form" onsubmit="event.preventDefault();submitOrderForm('${p.id}');">
+      <div class="form-grid">
+        <div class="field full"><label>Quantity *</label><input id="order-qty" type="number" name="quantity" min="1" max="${stock}" value="1" oninput="updateOrderTotal('${p.id}')" required></div>
+        <div class="field"><label>Full name *</label><input required name="name" autocomplete="name"></div>
+        <div class="field"><label>Phone number *</label><input required type="tel" name="phone" autocomplete="tel"></div>
+        <div class="field full"><label>Email (optional)</label><input type="email" name="email" autocomplete="email"></div>
+        <div class="field full"><label>Full delivery address *</label><textarea required name="address" autocomplete="street-address" placeholder="House/Flat, Street, Area, City, Province"></textarea></div>
+      </div>
+      <div id="order-summary" class="admin-card" style="margin-top:12px;background:#FAF9F7;"><b>Order summary</b><div style="margin-top:8px;display:grid;gap:4px;font-size:13px;"><span>Price: <strong id="order-price">${money(calc.unitPrice)}</strong></span><span>Delivery: <strong id="order-delivery">${calc.delivery?money(calc.delivery):'FREE'}</strong></span><span>Total: <strong id="order-total">${money(calc.total)}</strong></span><span style="color:var(--ink-soft);">Stock available: ${stock}</span></div></div>
+      <div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button id="order-submit-btn" type="submit" class="btn">Submit Order</button></div>
+    </form>`);
+}
+function updateOrderTotal(productId){
+  const p=PRODUCTS.find(x=>x.id===productId), q=Math.max(1,Number(document.getElementById('order-qty')?.value)||1), stock=Math.max(1,Number(p?.stock)||1); const calc=calculateOrder(p,Math.min(q,stock));
+  const a=document.getElementById('order-price'),b=document.getElementById('order-delivery'),c=document.getElementById('order-total'); if(a)a.textContent=money(calc.unitPrice)+' × '+Math.min(q,stock); if(b)b.textContent=calc.delivery?money(calc.delivery):'FREE'; if(c)c.textContent=money(calc.total);
+}
+async function submitOrderForm(productId){
+  const form=document.getElementById('order-form'); if(!form)return; const btn=document.getElementById('order-submit-btn'); const fd=new FormData(form); const p=PRODUCTS.find(x=>x.id===productId); if(!p)return;
+  const stock=Math.max(0,Number(p.stock)||0), qty=Number(fd.get('quantity'))||1; if(qty<1||qty>stock){toast('Quantity must be between 1 and available stock.');return;}
+  if(btn){btn.disabled=true;btn.textContent='Submitting...';}
+  try{ await submitStoreOrder(productId,qty,{name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:String(fd.get('email')||'').trim(),address:String(fd.get('address')||'').trim()}); closeModal(); toast('Order submitted successfully ✓'); }
+  catch(e){console.error(e);toast('Order failed: '+(e.message||'Please try again'));if(btn){btn.disabled=false;btn.textContent='Submit Order';}}
+}
+function money(n){return 'Rs. '+Number(n||0).toLocaleString('en-PK',{maximumFractionDigits:2});}
+function formatOrderStatus(s){return s==='confirmed'?'Confirmed':s==='cancelled'?'Cancelled':'Pending';}
+
 async function boot(){
   const demo=buildDemoConfig();
+  // Instant first paint: show the local/demo structure immediately; cloud sync continues in background.
+  if(!SETTINGS){ SETTINGS=JSON.parse(JSON.stringify(demo.settings)); PRODUCTS=demo.products; CATEGORIES=demo.categories; FLASHSALES=demo.flashsales; BANNERS=demo.banners; MEDIA=demo.media; PAGES=demo.pages; normalizeCloudState(); applyTheme(); render(); }
 
   /* ---------- CACHE-FIRST STARTUP ----------
      If this browser has a previous complete snapshot, render it first.
      Cloud reads below still run and become authoritative afterwards. */
   let __fvCachedSnapshot = null;
   try{
-    __fvCachedSnapshot = window.FVCustomerCache && window.FVCustomerCache.read();
-    if(window.FVCustomerCache && window.FVCustomerCache.isUsable(__fvCachedSnapshot)){
+    __fvCachedSnapshot = window.StoreXCustomerCache && window.StoreXCustomerCache.read();
+    if(window.StoreXCustomerCache && window.StoreXCustomerCache.isUsable(__fvCachedSnapshot)){
       const c = __fvCachedSnapshot.data || {};
       if(c.settings) SETTINGS = c.settings;
       if(Array.isArray(c.products)) PRODUCTS = c.products;
@@ -869,6 +948,7 @@ async function boot(){
   BANNERS = await loadKey(KEYS.banners, demo.banners);
   MEDIA = await loadKey(KEYS.media, demo.media);
   PAGES = await loadKey(KEYS.pages, demo.pages);
+   await loadOrders();
   // StoreX branding/content is fixed for this version of the storefront.
   SETTINGS.siteName = 'StoreX';
   const standardPages = buildStoreXPages();
@@ -882,23 +962,17 @@ async function boot(){
   render();
   applyMediaSizing();
   initLazyMedia();
-}
 
-
-  /* Save the complete authoritative cloud state for the next visit. */
+  // Store the newest authoritative Supabase state for instant repeat visits.
   try{
-    if(window.FVCustomerCache){
-      window.FVCustomerCache.write({
-        settings:SETTINGS,
-        products:PRODUCTS,
-        categories:CATEGORIES,
-        flashsales:FLASHSALES,
-        banners:BANNERS,
-        media:MEDIA,
-        pages:PAGES
+    if(window.StoreXCustomerCache){
+      window.StoreXCustomerCache.write({
+        settings:SETTINGS, products:PRODUCTS, categories:CATEGORIES,
+        flashsales:FLASHSALES, banners:BANNERS, media:MEDIA, pages:PAGES
       });
     }
-  }catch(e){ console.warn('StoreX cache write skipped:', e); }
+  }catch(e){ console.warn('StoreX cache write skipped:',e); }
+}
 
 function loadLazyBackground(el){
   if(!el || el.dataset.lazyLoaded==='1') return;
@@ -1046,6 +1120,7 @@ function safeRenderFallback(message){
 }
 function render(){
   if(StoreX_RENDERING) return;
+  if(!location.hash.startsWith('#/admin-of-storex')) window.scrollTo(0,0);
   StoreX_RENDERING=true;
   try{
     normalizeCloudState();
@@ -1202,33 +1277,11 @@ function renderMobileDrawer(){
 }
 
 function renderFooter(){
-  const s = SETTINGS.footer;
-  const topCats = [...CATEGORIES].filter(c=>c.status!=='hidden').sort((a,b)=>{
-    const score=c=>{ const items=PRODUCTS.filter(p=>p.status==='published'&&p.category===c.id); return items.reduce((n,p)=>n+(p.bestSeller?100:0)+(p.trending?50:0)+(p.clicks||0)+(p.views||0),0); };
-    return score(b)-score(a) || (a.order||0)-(b.order||0);
-  }).slice(0,5);
-  const cats = topCats.map(c=>`<a href="#/category/${esc(c.slug)}">${esc(c.name)}</a>`).join('') || '<span style="color:#71757B;font-size:13px;">No categories yet</span>';
-  const pageLinks = PAGES.filter(p=>p.status==='published').map(p=>`<a href="#/page/${esc(p.slug)}">${esc(p.title)}</a>`).join('');
-  const soc = s.social;
-  const socialIcons = {facebook:'f',instagram:'\u25CE',tiktok:'\u266A',youtube:'\u25B6',whatsapp:'\u260E',twitter:'X'};
-  const socialRow = Object.keys(soc).filter(k=>soc[k]).map(k=>`<a href="${esc(soc[k])}" target="_blank" rel="noopener" aria-label="${k}">${socialIcons[k]||'\u2022'}</a>`).join('');
-  return `
-  <footer id="site-footer">
-    <div class="container footer-grid">
-      <div>
-        <h4>${esc(SETTINGS.siteName)}</h4>
-        <p style="font-size:13.5px;color:#B7BABE;max-width:320px;">${esc(s.about)}</p>
-        <div class="social-row">${socialRow}</div>
-      </div>
-      <div><h4>Categories</h4>${cats}</div>
-      <div><h4>Quick Links</h4><a href="#/">Home</a><a href="#/flash-sale">Flash Sale</a>${SETTINGS.darazStoreUrl?`<a href="${esc(SETTINGS.darazStoreUrl)}" target="_blank" rel="noopener">Visit us on Daraz</a>`:''}</div>
-      <div><h4>Information</h4>${pageLinks||'<span style="color:#71757B;font-size:13px;">No pages yet</span>'}</div>
-    </div>
-    <div class="container footer-bottom">
-      <span>${esc(s.copyright)}</span>
-      <span>Purchases complete securely on Daraz</span>
-    </div>
-  </footer>`;
+  const s=SETTINGS.footer||{};
+  const topCats=[...CATEGORIES].filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0)).slice(0,5);
+  const cats=topCats.map(c=>`<a href="#/category/${esc(c.slug)}">${esc(c.name)}</a>`).join('')||'<span style="color:#71757B;font-size:13px;">No categories yet</span>';
+  const pageLinks=[...new Map(PAGES.filter(p=>p.status==='published').map(p=>[p.slug,p])).values()].map(p=>`<a href="#/page/${esc(p.slug)}">${esc(p.title)}</a>`).join('');
+  return `<footer id="site-footer"><div class="container footer-grid"><div><h4>${esc(SETTINGS.siteName)}</h4><p style="font-size:13.5px;color:#B7BABE;max-width:320px;">${esc(s.about||'')}</p></div><div><h4>Categories</h4>${cats}</div><div><h4>Quick Links</h4><a href="#/">Home</a><a href="#/flash-sale">Flash Sale</a></div><div><h4>Information</h4>${pageLinks||'<span style="color:#71757B;font-size:13px;">No pages yet</span>'}</div></div><div class="container footer-bottom"><span>${esc(s.copyright||'')}</span><span>Secure direct ordering</span></div></footer>`;
 }
 
 /* ================= HOME / SECTIONS ================= */
@@ -1247,8 +1300,7 @@ function renderSection(sec){
     case 'productCollection': return renderCollectionSection(sec);
     case 'categoryShowcase': return renderCategoryShowcaseSection(sec);
     case 'banner': return renderBannerSection(sec);
-    case 'darazPromo': return renderDarazPromoSection();
-    case 'customHtml': return `<section class="section container">${sec.config&&sec.config.html||''}</section>`;
+        case 'customHtml': return `<section class="section container">${sec.config&&sec.config.html||''}</section>`;
     default: return '';
   }
 }
@@ -1315,9 +1367,8 @@ function flashImages(f){
 }
 function flashVisualHtml(images){
   if(!images.length) return `<div class="flash-visual"></div>`;
-  if(images.length===1) return `<div class="flash-visual" data-lazy-bg="${esc(images[0])}"></div>`;
-  return `<div class="flash-visual flash-visual-auto" data-images='${esc(JSON.stringify(images))}'>
-    ${images.map((src,i)=>`<div class="flash-visual-slide ${i===0?'active':''}" data-lazy-bg="${esc(src)}"></div>`).join('')}
+  return `<div class="flash-visual ${images.length>1?'flash-visual-auto':''}">
+    ${images.map((src,i)=>`<div class="flash-visual-slide ${i===0?'active':''}"><img src="${esc(src)}" alt="Flash Sale" loading="eager" decoding="async"></div>`).join('')}
   </div>`;
 }
 let FLASH_VISUAL_TIMERS = [];
@@ -1404,17 +1455,22 @@ function renderCategoriesSection(sec){
     return `<section class="section container"><div class="section-head"><div><h2>${esc(sec.title||'Shop by Category')}</h2><p>${esc(sec.subtitle||'')}</p></div></div>
     <div class="empty-state" style="background:#fff;border:1px solid var(--line);border-radius:10px;"><div class="icon">\u{1F4C2}</div><h3>No categories available</h3><p>Add categories from the admin panel.</p></div></section>`;
   }
-  const cats = CATEGORIES.filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0)).map(c=>`
+  const selectedIds=Array.isArray(SETTINGS.homeCategoryIds)?SETTINGS.homeCategoryIds:[];
+   const visibleCats=CATEGORIES.filter(c=>c.status!=='hidden');
+   const selected=selectedIds.length?visibleCats.filter(c=>selectedIds.includes(c.id)):visibleCats.slice(0,6);
+   const cats=selected.slice(0,6).sort((a,b)=>(a.order||0)-(b.order||0)).map(c=>`
     <a class="cat-card" href="#/category/${esc(c.slug)}">
       <div class="cat-icon">${c.image? `<img src="${mediaSrc(c.image)}" alt="" loading="lazy" decoding="async">` : (c.icon||'\u{1F6CD}')}</div>
       <div class="cat-name">${esc(c.name)}</div>
     </a>`).join('');
   return `<section class="section container"><div class="section-head"><div><h2>${esc(sec.title||'Shop by Category')}</h2><p>${esc(sec.subtitle||'')}</p></div></div>
-  <div class="cat-grid">${cats}</div></section>`;
+  <div class="cat-grid">${cats}</div><div style="text-align:center;margin-top:16px;"><a class="btn small ghost" href="#/category/all">View All</a></div></section>`;
 }
 
 function filteredProducts(filter){
-  let list = PRODUCTS.filter(p=>p.status==='published');
+  // Homepage collections should only show products that are currently in stock.
+  // Out-of-stock products remain available in the full All Products catalog.
+  let list = PRODUCTS.filter(p=>p.status==='published' && Math.max(0,Number(p.stock)||0)>0);
   if(filter==='featured') list = list.filter(p=>p.featured);
   else if(filter==='trending') list = list.filter(p=>p.trending);
   else if(filter==='newArrival') list = list.filter(p=>p.newArrival);
@@ -1437,7 +1493,7 @@ function renderCollectionSection(sec){
       <div class="spotlight-body">
         <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}"><h3>${esc(p.shortTitle||p.title)}</h3></a>
         ${p.shortDesc?`<p style="color:var(--ink-soft);margin:0;">${esc(p.shortDesc)}</p>`:''}
-        <button class="btn" style="margin-top:6px;width:fit-content;" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
+        <button class="btn" style="margin-top:6px;width:fit-content;" onclick="openOrderModal('${p.id}')">Buy Now</button>
       </div>
     </div></section>`;
   }
@@ -1455,7 +1511,7 @@ function renderCategoryShowcaseSection(sec){
   const cfg = sec.config||{count:3};
   const cats = CATEGORIES.filter(c=>c.status!=='hidden').sort((a,b)=>(a.order||0)-(b.order||0));
   const groups = cats.map(c=>{
-    const list = PRODUCTS.filter(p=>p.status==='published' && p.category===c.id).sort((a,b)=>(a.order||0)-(b.order||0)).slice(0, cfg.count||3);
+    const list = PRODUCTS.filter(p=>p.status==='published' && p.category===c.id && Math.max(0,Number(p.stock)||0)>0).sort((a,b)=>(a.order||0)-(b.order||0)).slice(0, cfg.count||3);
     if(!list.length) return '';
     return `<div class="cat-showcase-group">
       <div class="cat-showcase-head"><h3>${esc(c.name)}</h3><a href="#/category/${esc(c.slug)}">See all</a></div>
@@ -1492,33 +1548,12 @@ function renderBannerSection(sec){
       ${b.buttonText?`<span class="btn small" style="background:${esc(d.buttonBg||'#F57224')};color:${esc(d.buttonColor||'#fff')};border:1.5px solid ${esc(d.buttonBorder||d.buttonBg||'#F57224')};${d.buttonWidth?`width:${Number(d.buttonWidth)}px;justify-content:center;`:''}">${safeRichHtml(b.buttonText)}</span>`:''}
     </div></a></section>`;
 }
-function renderDarazPromoSection(){
-  const d=Object.assign({enabled:true,title:'VG Tower Official Daraz Store',description:'Shop our official store on Daraz.',buttonText:'Visit',buttonUrl:'https://www.daraz.pk/',image:'',height:96,radius:10,background:'#FFF4EA',textColor:'#1F2328',buttonBg:'#F57224',buttonColor:'#FFFFFF',buttonBorder:'#F57224',padding:16,imageFit:'cover'},SETTINGS.darazPromo||{});
-  if(!d.enabled) return '';
-  const img=mediaSrc(d.image);
-  return `<section class="section container" style="padding-top:18px;padding-bottom:18px;"><div class="daraz-promo" style="min-height:${Math.max(64,Number(d.height)||96)}px;border-radius:${Math.max(0,Number(d.radius)||10)}px;background:${esc(d.background)};color:${esc(d.textColor)};padding:${Math.max(8,Number(d.padding)||16)}px;">${img?`<div class="daraz-promo-image"><img src="${img}" alt="" loading="lazy" decoding="async"></div>`:''}<div class="daraz-promo-copy"><strong>${safeRichHtml(d.title)}</strong>${d.description?`<span>${safeRichHtml(d.description)}</span>`:''}</div>${d.buttonText?`<a class="btn small" href="${esc(d.buttonUrl||'#')}" target="_blank" rel="noopener" style="background:${esc(d.buttonBg)};color:${esc(d.buttonColor)};border:1px solid ${esc(d.buttonBorder)};">${safeRichHtml(d.buttonText)}</a>`:''}</div></section>`;
-}
 
 /* ================= PRODUCT CARD ================= */
 function renderProductCard(p){
-  const img = p.mainImage ? mediaSrc(p.mainImage) : (p.images&&p.images[0]?mediaSrc(p.images[0]):'');
-  return `<div class="card">
-    <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a>
-    <div class="card-body">
-      <a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-title">${esc(p.shortTitle||p.title)}</a>
-      ${p.shortDesc?`<div class="card-desc">${esc(p.shortDesc)}</div>`:''}
-      <button class="card-cta" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
-    </div>
-  </div>`;
-}
-
-function buyOnDaraz(productId, customUrl){
-  let url = customUrl;
-  let prod = null;
-  if(!url){ prod = PRODUCTS.find(p=>p.id===productId); url = prod && prod.darazUrl; }
-  if(!url || !isValidHttpUrl(url)){ toast('This product has no valid Daraz link yet'); return; }
-  if(prod){ prod.clicks = (prod.clicks||0)+1; saveKey(KEYS.products, PRODUCTS); }
-  window.open(url, '_blank', 'noopener');
+  const img=p.mainImage?mediaSrc(p.mainImage):(p.images&&p.images[0]?mediaSrc(p.images[0]):'');
+  const original=Number(p.originalPrice??p.oldPrice??p.price)||0, special=Number(p.specialPrice??p.price)||original, pct=original>special?Math.round((original-special)/original*100):0, stock=Math.max(0,Number(p.stock)||0);
+  return `<div class="card"><a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-img">${img?`<img src="${img}" alt="${esc(p.title)}" loading="lazy" decoding="async">`:''}</a><div class="card-body"><a href="#/product/${esc(p.seo&&p.seo.slug||p.id)}" class="card-title">${esc(p.shortTitle||p.title)}</a>${p.shortDesc?`<div class="card-desc">${esc(p.shortDesc)}</div>`:''}<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;"><strong class="price">${money(special)}</strong>${original>special?`<del style="font-size:12px;color:var(--ink-soft);">${money(original)}</del><span class="badge-status on">-${pct}%</span>`:''}</div><button class="card-cta" onclick="openOrderModal('${p.id}')">Buy Now</button></div></div>`;
 }
 
 /* ================= PRODUCT DETAIL ================= */
@@ -1532,7 +1567,7 @@ function renderProductPage(key){
   const images = (p.images&&p.images.length? p.images : (p.mainImage?[p.mainImage]:[]));
   const main = images[PD_ACTIVE_IMG] || images[0];
   const cat = CATEGORIES.find(c=>c.id===p.category);
-  const related = PRODUCTS.filter(x=>x.status==='published' && x.id!==p.id && x.category===p.category).slice(0,3);
+  const related = PRODUCTS.filter(x=>x.status==='published' && x.id!==p.id && x.category===p.category && Math.max(0,Number(x.stock)||0)>0).slice(0,3);
   applySEO(p.seo, p.shortTitle||p.title, p.shortDesc);
   return `<div class="container" style="padding:30px 20px;">
     <div class="crumb"><a href="#/">Home</a> / ${cat?`<a href="#/category/${esc(cat.slug)}">${esc(cat.name)}</a> / `:''}${esc(p.shortTitle||p.title)}</div>
@@ -1545,7 +1580,7 @@ function renderProductPage(key){
         <h1 class="pd-title">${esc(p.title)}</h1>
         <div class="pd-desc">${esc(p.fullDesc||p.shortDesc||'')}</div>
         ${p.tags&&p.tags.length?`<div class="pd-tags">${p.tags.map(t=>`<span class="tag-pill">${esc(t)}</span>`).join('')}</div>`:''}
-        <button class="btn" style="width:100%;justify-content:center;font-size:15px;padding:14px;" onclick="buyOnDaraz('${p.id}')">Buy Now</button>
+        <div style="margin:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><strong class="price">${money(Number(p.specialPrice??p.price)||0)}</strong>${Number(p.originalPrice??p.oldPrice)>Number(p.specialPrice??p.price)?`<del style="color:var(--ink-soft);">${money(Number(p.originalPrice??p.oldPrice))}</del>`:''}</div><p style="font-size:13px;color:var(--ink-soft);">Delivery: ${Number(p.deliveryCharges)||0?money(Number(p.deliveryCharges)): 'FREE'} · Stock: ${Math.max(0,Number(p.stock)||0)}</p><button class="btn" style="width:100%;justify-content:center;font-size:15px;padding:14px;" onclick="openOrderModal('${p.id}')">Buy Now</button>
         ${cat?`<p style="font-size:12.5px;color:var(--ink-soft);margin-top:14px;">Category: <a href="#/category/${esc(cat.slug)}" style="color:var(--primary);">${esc(cat.name)}</a></p>`:''}
       </div>
     </div>
@@ -1556,7 +1591,15 @@ function renderProductPage(key){
 /* ================= CATEGORY PAGE ================= */
 function renderCategoryPage(slug){
   let list, title, desc;
-  if(slug==='all'){ list = PRODUCTS.filter(p=>p.status==='published'); title='All Products'; desc='Browse our full catalog'; }
+  if(slug==='all'){
+    // Keep in-stock products first and move all out-of-stock products to the bottom.
+    list = PRODUCTS.filter(p=>p.status==='published').sort((a,b)=>{
+      const ao=Math.max(0,Number(a.stock)||0)<=0?1:0;
+      const bo=Math.max(0,Number(b.stock)||0)<=0?1:0;
+      return ao-bo || (a.order||0)-(b.order||0);
+    });
+    title='All Products'; desc='Browse our full catalog';
+  }
   else{
     const cat = CATEGORIES.find(c=>c.slug===slug);
     if(!cat) return renderNotFound('Category not found','This category may have been removed.');
@@ -1601,7 +1644,7 @@ function renderFlashSalePage(slug){
       <div class="card-body">
         <div class="card-title">${esc(c.title)}</div>
         ${c.desc?`<div class="card-desc">${esc(c.desc)}</div>`:''}
-        <button class="card-cta" onclick="buyOnDaraz(null,'${esc(c.darazUrl||'')}')">Buy Now</button>
+        <button class="card-cta" onclick="toast('This flash-only item must be added as a normal product before ordering.')">Buy Now</button>
       </div>
     </div>`;
   }).join('');
@@ -1764,6 +1807,7 @@ function renderAdminSidebar(){
 function renderAdminView(){
   switch(ADMIN_VIEW){
     case 'products': return adminProducts();
+    case 'orders': return adminOrders();
     case 'categories': return adminCategories();
     case 'flashsales': return adminFlashSales();
     case 'banners': return adminBanners();
@@ -1804,7 +1848,7 @@ function adminDashboard(){
     </div>
   </div>
   <div class="admin-card">
-    <h3 style="margin-top:0;">Top products by Daraz clicks</h3>
+    <h3 style="margin-top:0;">Top products by Buy Now clicks</h3>
     ${topClicks.length? `<table class="admin-table"><thead><tr><th>Product</th><th>Clicks</th><th>Views</th></tr></thead><tbody>
       ${topClicks.map(p=>`<tr><td>${esc(p.title)}</td><td>${p.clicks||0}</td><td>${p.views||0}</td></tr>`).join('')}
     </tbody></table>` : '<p style="color:var(--ink-soft);font-size:13.5px;">No data yet.</p>'}
@@ -1876,7 +1920,7 @@ function deleteProduct(id){
 }
 
 function openProductModal(id){
-  const p = id ? PRODUCTS.find(x=>x.id===id) : {id:uid(),title:'',shortTitle:'',shortDesc:'',fullDesc:'',images:[],mainImage:null,darazUrl:'',category:'',tags:[],price:'',oldPrice:'',discount:'',badge:'',sku:'',status:'published',featured:false,trending:false,newArrival:false,bestSeller:false,order:PRODUCTS.length,seo:{slug:'',title:'',description:'',keywords:''},clicks:0,views:0};
+  const p = id ? PRODUCTS.find(x=>x.id===id) : {id:uid(),title:'',shortTitle:'',shortDesc:'',fullDesc:'',images:[],mainImage:null,category:'',tags:[],price:'',oldPrice:'',discount:'',badge:'',sku:'',status:'published',featured:false,trending:false,newArrival:false,bestSeller:false,order:PRODUCTS.length,seo:{slug:'',title:'',description:'',keywords:''},clicks:0,views:0};
   p.seo = p.seo || {slug:'',title:'',description:'',keywords:''};
   const isNew = !id;
   const catOptions = CATEGORIES.map(c=>`<option value="${c.id}" ${p.category===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
@@ -1892,7 +1936,7 @@ function openProductModal(id){
         <div class="field"><label>Category</label><select name="category"><option value="">\u2014 None \u2014</option>${catOptions}</select></div>
         <div class="field"><label>Tags (comma separated)</label><input type="text" name="tags" value="${esc((p.tags||[]).join(', '))}"></div>
         <div class="field"><label>Badge (e.g. "Hot", "-20%")</label><input type="text" name="badge" value="${esc(p.badge)}"></div>
-        <div class="field full"><label>Daraz product URL *</label><input required type="url" name="darazUrl" placeholder="https://www.daraz.pk/products/..." value="${esc(p.darazUrl)}"></div>
+        <div class="field"><label>Original price (Rs.) *</label><input required type="number" min="0" step="0.01" name="originalPrice" value="${esc((p.originalPrice??p.oldPrice??p.price??''))}"></div><div class="field"><label>Special / discounted price (Rs.)</label><input type="number" min="0" step="0.01" name="specialPrice" value="${esc((p.specialPrice??p.price??''))}"></div><div class="field"><label>Stock quantity *</label><input required type="number" min="0" step="1" name="stock" value="${esc(p.stock??0)}"></div><div class="field"><label>Delivery charges (Rs.)</label><input type="number" min="0" step="0.01" name="deliveryCharges" value="${esc(p.deliveryCharges??0)}"></div><div class="field full"><label>Promotion</label><div class="form-grid"><div class="field"><label>Free delivery after qty</label><input type="number" min="0" name="freeDeliveryQty" value="${esc(p.promotion?.freeDeliveryQty??0)}"></div><div class="field"><label>Percent off (%)</label><input type="number" min="0" max="100" step="0.01" name="percentOff" value="${esc(p.promotion?.percentOff??0)}"></div><div class="field"><label>Percent off after qty</label><input type="number" min="0" name="percentOffQty" value="${esc(p.promotion?.percentOffQty??0)}"></div><div class="field"><label>Buy quantity</label><input type="number" min="0" name="buyQty" value="${esc(p.promotion?.buyQty??0)}"></div><div class="field"><label>Free quantity</label><input type="number" min="0" name="freeQty" value="${esc(p.promotion?.freeQty??0)}"></div></div></div>
         <div class="field"><label>Status</label><select name="status"><option value="published" ${p.status==='published'?'selected':''}>Published</option><option value="hidden" ${p.status==='hidden'?'selected':''}>Hidden</option></select></div>
         <div class="field"><label>Display order</label><input type="number" name="order" value="${esc(p.order)}"></div>
         <div class="field full">
@@ -1958,15 +2002,17 @@ function saveProductForm(pid, isNew){
   const fd = new FormData(form);
   const draft = isNew ? window.__draftProduct : PRODUCTS.find(x=>x.id===pid);
   const title = fd.get('title').trim();
-  const darazUrl = fd.get('darazUrl').trim();
-  if(!isValidHttpUrl(darazUrl)){ toast('Please enter a valid http(s) Daraz URL'); return; }
+  const originalPrice=Number(fd.get('originalPrice')||0), specialPrice=Number(fd.get('specialPrice')||originalPrice), stock=Math.max(0,Number(fd.get('stock')||0));
+  if(originalPrice<0 || specialPrice<0 || specialPrice>originalPrice){ toast('Special price must be between 0 and original price.'); return; }
+  const autoDiscount=originalPrice>0?Math.round((originalPrice-specialPrice)/originalPrice*100):0;
   Object.assign(draft, {
     title, shortTitle: fd.get('shortTitle').trim(), sku: fd.get('sku').trim(),
     shortDesc: fd.get('shortDesc').trim(), fullDesc: fd.get('fullDesc').trim(),
     category: fd.get('category'), tags: fd.get('tags').split(',').map(t=>t.trim()).filter(Boolean),
-    price: fd.get('price')?Number(fd.get('price')):'', oldPrice: fd.get('oldPrice')?Number(fd.get('oldPrice')):'',
-    discount: fd.get('discount')?Number(fd.get('discount')):'', badge: fd.get('badge').trim(),
-    darazUrl, status: fd.get('status'), order: Number(fd.get('order'))||0,
+    price:specialPrice, oldPrice:originalPrice, originalPrice, specialPrice, stock, deliveryCharges:Math.max(0,Number(fd.get('deliveryCharges')||0)),
+    discount:autoDiscount, badge:autoDiscount?'-'+autoDiscount+'%':fd.get('badge').trim(),
+    promotion:{freeDelivery:Number(fd.get('freeDeliveryQty')||0)>0,freeDeliveryQty:Number(fd.get('freeDeliveryQty')||0),percentOff:Math.max(0,Number(fd.get('percentOff')||0)),percentOffQty:Math.max(0,Number(fd.get('percentOffQty')||0)),buyQty:Math.max(0,Number(fd.get('buyQty')||0)),freeQty:Math.max(0,Number(fd.get('freeQty')||0))},
+    status: fd.get('status'), order: Number(fd.get('order'))||0,
     featured: fd.get('featured')==='on', trending: fd.get('trending')==='on', newArrival: fd.get('newArrival')==='on', bestSeller: fd.get('bestSeller')==='on',
     seo: { slug: slugify(fd.get('seoSlug').trim() || title), title: fd.get('seoTitle').trim(), keywords: fd.get('seoKeywords').trim(), description: fd.get('seoDescription').trim() }
   });
@@ -1974,6 +2020,15 @@ function saveProductForm(pid, isNew){
   saveKey(KEYS.products, PRODUCTS);
   closeModal(); toast('Product saved in this session');
 }
+
+
+/* ---------- Orders ---------- */
+function adminOrders(){
+  if(!ORDERS.length) return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div class="empty-state"><div class="icon">📦</div><h3>No orders yet</h3><p>Customer orders will appear here.</p></div></div>`;
+  return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div style="overflow:auto"><table class="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>⋮</th></tr></thead><tbody>${ORDERS.map(o=>`<tr><td>${esc(String(o.id).slice(0,8))}<br><small>${o.created_at?new Date(o.created_at).toLocaleString():''}</small></td><td>${esc(o.customer_name||'')}<br>${esc(o.customer_phone||'')}</td><td>${esc(o.product_title||'')}</td><td>${Number(o.quantity)||0}</td><td>${money(o.total_amount)}</td><td><span class="badge-status ${o.status==='confirmed'?'on':o.status==='cancelled'?'off':''}">${formatOrderStatus(o.status)}</span></td><td><button class="btn small ghost" onclick="showOrderDetails('${o.id}')">⋮ Details</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function showOrderDetails(id){ const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o)return; showModal(`<h2>Order Details</h2><div style="display:grid;gap:7px;font-size:13px"><b>${esc(o.product_title||'')}</b><span>Name: ${esc(o.customer_name||'')}</span><span>Phone: ${esc(o.customer_phone||'')}</span><span>Email: ${esc(o.customer_email||'')}</span><span>Address: ${esc(o.customer_address||'')}</span><span>Quantity: ${Number(o.quantity)||0}</span><span>Delivery: ${money(o.delivery_charges)}</span><span>Total: <b>${money(o.total_amount)}</b></span><span>Status: ${formatOrderStatus(o.status)}</span></div><div class="modal-close-row">${o.status==='pending'?`<button class="btn" onclick="updateOrderStatus('${o.id}','confirmed')">Confirm Order</button><button class="btn danger" onclick="updateOrderStatus('${o.id}','cancelled')">Cancel Order</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`); }
+async function updateOrderStatus(id,status){ if(!SUPABASE_ADMIN||!supabaseClient)return; try{ const {error}=await supabaseClient.from('storex_orders').update({status,updated_at:new Date().toISOString()}).eq('id',id); if(error)throw error; const o=ORDERS.find(x=>String(x.id)===String(id)); if(o)o.status=status; closeModal(); render(); toast(status==='confirmed'?'Order confirmed ✓':'Order cancelled'); }catch(e){toast('Order update failed: '+(e.message||'Unknown error'));} }
 
 /* ---------- Categories ---------- */
 function adminCategories(){
@@ -2008,7 +2063,7 @@ function openCategoryModal(id){
         <div class="field full"><label>Description</label><textarea name="description">${esc(c.description)}</textarea></div>
         <div class="field"><label>Icon (emoji, optional)</label><input type="text" name="icon" value="${esc(c.icon)}" placeholder="e.g. \u{1F4F1}"></div>
         <div class="field"><label>Display order</label><input type="number" name="order" value="${esc(c.order)}"></div>
-        <div class="field"><label>Status</label><select name="status"><option value="visible" ${c.status!=='hidden'?'selected':''}>Visible</option><option value="hidden" ${c.status==='hidden'?'selected':''}>Hidden</option></select></div>
+        <div class="field"><label>Status</label><select name="status"><option value="visible" ${c.status!=='hidden'?'selected':''}>Visible</option><option value="hidden" ${c.status==='hidden'?'selected':''}>Hidden</option></select></div><div class="field full"><label class="checkline"><input type="checkbox" name="homeFeatured" ${Array.isArray(SETTINGS.homeCategoryIds)&&SETTINGS.homeCategoryIds.includes(c.id)?'checked':''}> Show on Home (maximum 6 categories)</label></div>
         <div class="field full">
           <label>Category image</label>
           <div class="upload-box">
@@ -2038,11 +2093,12 @@ function saveCategoryForm(id, isNew){
   const name = fd.get('name').trim();
   Object.assign(draft, {
     name, slug: slugify(fd.get('slug').trim() || name), description: fd.get('description').trim(),
-    icon: fd.get('icon').trim(), order: Number(fd.get('order'))||0, status: fd.get('status'),
+    icon: fd.get('icon').trim(), order: Number(fd.get('order'))||0, status: fd.get('status'), homeFeatured:fd.get('homeFeatured')==='on',
     seo: { title: fd.get('seoTitle').trim(), keywords: fd.get('seoKeywords').trim(), description: fd.get('seoDescription').trim() }
   });
   if(isNew){ CATEGORIES.push(draft); window.__draftCategory=null; }
-  saveKey(KEYS.categories, CATEGORIES); closeModal(); toast('Category saved');
+  if(draft.homeFeatured){ if(!Array.isArray(SETTINGS.homeCategoryIds)) SETTINGS.homeCategoryIds=[]; if(!SETTINGS.homeCategoryIds.includes(draft.id)) SETTINGS.homeCategoryIds.push(draft.id); if(SETTINGS.homeCategoryIds.length>6){ SETTINGS.homeCategoryIds=SETTINGS.homeCategoryIds.slice(0,6); toast('Only 6 home categories are allowed.'); } }else if(Array.isArray(SETTINGS.homeCategoryIds)){ SETTINGS.homeCategoryIds=SETTINGS.homeCategoryIds.filter(x=>x!==draft.id); }
+   saveKey(KEYS.categories, CATEGORIES); saveKey(KEYS.settings, SETTINGS); closeModal(); toast('Category saved');
 }
 
 /* ---------- Flash Sales ---------- */
@@ -2155,9 +2211,8 @@ function addExistingToFlash(id, isNew){
 function addCustomFlashProduct(id, isNew){
   const f = getFlashDraft(id,isNew);
   const title = prompt('Custom product title:'); if(!title) return;
-  const price = prompt('Price (optional):','') || '';
-  const darazUrl = prompt('Daraz URL:','') || '';
-  f.products = f.products||[]; f.products.push({type:'custom', title, darazUrl, image:null, desc:'', badge:''});
+  const price = Number(prompt('Price (optional):','')||0);
+  f.products = f.products||[]; f.products.push({type:'custom', title, price, image:null, desc:'', badge:''});
   document.getElementById('flash-products-list').innerHTML = renderFlashProductsList(f);
 }
 
@@ -2264,7 +2319,7 @@ function adminHomepage(){
   <div class="admin-card">${items || '<p style="color:var(--ink-soft);font-size:13.5px;">No sections yet.</p>'}</div>`;
 }
 
-function sectionTypeLabel(t){ return {hero:'Hero banner',flashsale:'Flash sale',categories:'Categories',productCollection:'Product collection',categoryShowcase:'Products by category (auto)',banner:'Promotional banner',darazPromo:'Daraz mini banner',customHtml:'Custom text/HTML'}[t]||t; }
+function sectionTypeLabel(t){ return {hero:'Hero banner',flashsale:'Flash sale',categories:'Categories',productCollection:'Product collection',categoryShowcase:'Products by category (auto)',banner:'Promotional banner',legacyPromo:'Legacy promo',customHtml:'Custom text/HTML'}[t]||t; }
 
 function reorderSection(dropIdx){
   if(DRAG_IDX===null || DRAG_IDX===dropIdx) return;
@@ -2523,32 +2578,8 @@ function adminTheme(){
         <button class="btn" type="submit">Save Button Settings</button>
       </div>
     </form>
-  </div>
-  <div class="admin-card">
-    <h3 style="margin-top:0;">Official Daraz Store Mini Banner</h3>
-    <p style="font-size:12.5px;color:var(--ink-soft);">This compact strip appears on the homepage. Edit every visible part here: title, description, button, link, image, size, colors and spacing.</p>
-    <form onsubmit="event.preventDefault();const fd=new FormData(this);SETTINGS.darazPromo=Object.assign({},SETTINGS.darazPromo,{enabled:fd.get('enabled')==='on',title:fd.get('title'),description:fd.get('description'),buttonText:fd.get('buttonText'),buttonUrl:fd.get('buttonUrl'),image:fd.get('image')||SETTINGS.darazPromo?.image||'',height:Number(fd.get('height'))||96,radius:Number(fd.get('radius'))||10,background:fd.get('background'),textColor:fd.get('textColor'),buttonBg:fd.get('buttonBg'),buttonColor:fd.get('buttonColor'),buttonBorder:fd.get('buttonBorder'),padding:Number(fd.get('padding'))||16});saveKey(KEYS.settings,SETTINGS);toast('Daraz mini banner saved');">
-      <div class="form-grid">
-        <div class="field full"><label class="checkline"><input type="checkbox" name="enabled" ${SETTINGS.darazPromo?.enabled?'checked':''}> Show mini banner</label></div>
-        <div class="field full"><label>Title</label><input type="text" name="title" value="${esc(SETTINGS.darazPromo?.title||'VG Tower Official Daraz Store')}"></div>
-        <div class="field full"><label>Description</label><input type="text" name="description" value="${esc(SETTINGS.darazPromo?.description||'')}"></div>
-        <div class="field full"><label>Mini Banner Image URL</label><input type="url" name="image" value="${esc(SETTINGS.darazPromo?.image||'')}" placeholder="https://..."><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><label class="btn small">Upload from gallery<input type="file" accept="image/*" style="display:none" onchange="handleLocalFileInput(this,url=>{SETTINGS.darazPromo.image=url;saveKey(KEYS.settings,SETTINGS);})"></label><button type="button" class="btn small ghost" onclick="openMediaPicker(url=>{SETTINGS.darazPromo.image=url;saveKey(KEYS.settings,SETTINGS);})">Choose from Media Library</button></div></div>
-        <div class="field"><label>Button Text</label><input type="text" name="buttonText" value="${esc(SETTINGS.darazPromo?.buttonText||'Visit')}"></div>
-        <div class="field"><label>Daraz Link</label><input type="url" name="buttonUrl" value="${esc(SETTINGS.darazPromo?.buttonUrl||'')}"></div>
-        <div class="field"><label>Height (px)</label><input type="number" name="height" value="${Number(SETTINGS.darazPromo?.height)||96}"></div>
-        <div class="field"><label>Corner Radius</label><input type="number" name="radius" value="${Number(SETTINGS.darazPromo?.radius)||10}"></div>
-        <div class="field"><label>Background</label><input type="text" name="background" value="${esc(SETTINGS.darazPromo?.background||'#FFF4EA')}"></div>
-        <div class="field"><label>Text Color</label><input type="text" name="textColor" value="${esc(SETTINGS.darazPromo?.textColor||'#1F2328')}"></div>
-        <div class="field"><label>Button Background</label><input type="text" name="buttonBg" value="${esc(SETTINGS.darazPromo?.buttonBg||'#F57224')}"></div>
-        <div class="field"><label>Button Text Color</label><input type="text" name="buttonColor" value="${esc(SETTINGS.darazPromo?.buttonColor||'#FFFFFF')}"></div>
-        <div class="field"><label>Button Border</label><input type="text" name="buttonBorder" value="${esc(SETTINGS.darazPromo?.buttonBorder||'#F57224')}"></div>
-        <div class="field"><label>Padding</label><input type="number" name="padding" value="${Number(SETTINGS.darazPromo?.padding)||16}"></div>
-      </div>
-      <button class="btn" style="margin-top:12px;" type="submit">Save Daraz Mini Banner</button>
-    </form>
   </div>`;
 }
-
 
 /* ---------- Navigation ---------- */
 function adminNav(){
@@ -2685,7 +2716,6 @@ function adminSettings(){
     <form onsubmit="event.preventDefault();saveGeneralSettings(this);">
       <div class="form-grid">
         <div class="field"><label>Site Name</label><input type="text" name="siteName" value="${esc(s.siteName)}"></div>
-        <div class="field"><label>Daraz Store URL</label><input type="url" name="darazStoreUrl" value="${esc(s.darazStoreUrl)}"></div>
         <div class="field"><label>Google Analytics ID</label><input type="text" name="gaId" value="${esc(s.gaId)}"></div>
         <div class="field full"><label>Footer About Text</label><textarea name="footerAbout">${esc(s.footer.about)}</textarea></div>
         <div class="field full"><label>Footer Copyright</label><input type="text" name="footerCopyright" value="${esc(s.footer.copyright)}"></div>
@@ -2708,7 +2738,6 @@ function adminSettings(){
 function saveGeneralSettings(form){
   const fd=new FormData(form);
   SETTINGS.siteName=fd.get('siteName').trim();
-  SETTINGS.darazStoreUrl=fd.get('darazStoreUrl').trim();
   SETTINGS.gaId=fd.get('gaId').trim();
   SETTINGS.footer.about=fd.get('footerAbout').trim();
   SETTINGS.footer.copyright=fd.get('footerCopyright').trim();
@@ -2745,7 +2774,7 @@ StoreX_RECOVERY_TIMER=setInterval(()=>{ if(!document.hidden) refreshCloudStateAf
    refreshes from the newest local snapshot without a hard browser reload. */
 (function(){
   window.addEventListener('storage', function(e){
-    if(e.key !== 'StoreX.customer.snapshot.v4' || !e.newValue) return;
+    if(e.key !== 'StoreX.customer.snapshot.v5' || !e.newValue) return;
     if(location.hash && location.hash.startsWith('#/admin-of-storex')) return;
     try{
       const item=JSON.parse(e.newValue);
@@ -2778,7 +2807,7 @@ boot().catch(function(err){
   console.error('StoreX boot failed:', err);
   const app=document.getElementById('app');
   if(app){
-    app.innerHTML='<div style=\"min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#f7f7f7;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Please wait</h2><p style=\"margin:0;color:#666\">Please wait while the website is loading.</p></div></div>';
+    app.innerHTML='<div style=\"min-height:50vh;display:grid;place-items:center;padding:24px;font-family:Arial,sans-serif;background:#fff;color:#1f2328;text-align:center\"><div><h2 style=\"margin:0 0 8px\">Store is temporarily unavailable</h2><p style=\"margin:0;color:#666\">Please refresh once your internet connection is restored.</p></div></div>';
   }
 });
 </script>
