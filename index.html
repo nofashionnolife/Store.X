@@ -572,7 +572,18 @@ function subscribeRealtime(){
         const row=payload.new||payload.old;
         if(!row || !row.key) return;
         applyRemoteSetting(row.key,row.value).catch(err=>console.warn('Realtime update ignored:',err));
-      }).subscribe();
+      })
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'storex_orders'},payload=>{
+        if(!SUPABASE_ADMIN) return;
+        const row=payload.new;
+        if(row && row.id){ ORDERS=[row,...ORDERS.filter(x=>String(x.id)!==String(row.id))]; if(route().includes('/admin-of-storex') && ADMIN_VIEW==='orders') render(); }
+      })
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'storex_orders'},payload=>{
+        if(!SUPABASE_ADMIN) return;
+        const row=payload.new;
+        if(row && row.id){ ORDERS=ORDERS.map(x=>String(x.id)===String(row.id)?row:x); if(route().includes('/admin-of-storex') && ADMIN_VIEW==='orders') render(); }
+      })
+      .subscribe();
   }catch(err){ console.warn('StoreX realtime unavailable; normal cloud reads remain available.',err); }
 }
 
@@ -830,7 +841,7 @@ async function loadOrders(){
   try{
     const {data,error}=await supabaseClient.from('storex_orders').select('*').order('created_at',{ascending:false});
     if(error){ console.warn('StoreX orders read skipped:',error); return; }
-    if(Array.isArray(data)) ORDERS=data;
+    if(Array.isArray(data)) ORDERS=data.map(o=>Object.assign({city:''},o));
   }catch(e){ console.warn('StoreX orders read skipped:',e); }
 }
 async function submitStoreOrder(productId, qty, customer){
@@ -841,10 +852,11 @@ async function submitStoreOrder(productId, qty, customer){
   const calc=calculateOrder(p,quantity);
   if(stock>0 && quantity>stock) throw new Error('Requested quantity is greater than available stock.');
   if(!supabaseClient || !SUPABASE_READY) throw new Error('Order service is temporarily unavailable.');
-  const payload={product_id:p.id,product_title:p.title,product_sku:p.sku||null,quantity,unit_price:calc.unitPrice,original_price:calc.originalPrice,special_price:calc.specialPrice,discount_percent:calc.discountPercent,delivery_charges:calc.delivery,discount_amount:calc.discountAmount,total_amount:calc.total,customer_name:customer.name,customer_phone:customer.phone,customer_email:customer.email||null,customer_address:customer.address,status:'pending',promotion:calc.promotion||null};
-  const {data,error}=await supabaseClient.from('storex_orders').insert(payload).select('*').single();
+  const payload={product_id:p.id,product_title:p.title,product_sku:p.sku||null,quantity,unit_price:calc.unitPrice,original_price:calc.originalPrice,special_price:calc.specialPrice,discount_percent:calc.discountPercent,delivery_charges:calc.delivery,discount_amount:calc.discountAmount,total_amount:calc.total,customer_name:customer.name,customer_phone:customer.phone,customer_email:customer.email||null,city:customer.city,customer_address:customer.address,status:'pending',promotion:calc.promotion||null};
+  /* Important: do not request the inserted row back here. Public visitors have INSERT permission but intentionally do not have SELECT permission on orders. */
+  const {error}=await supabaseClient.from('storex_orders').insert(payload);
   if(error) throw error;
-  return data;
+  return true;
 }
 function calculateOrder(p,quantity){
   const original=Number(p.originalPrice ?? p.oldPrice ?? p.price)||0;
@@ -877,7 +889,8 @@ function openOrderModal(productId){
         <div class="field"><label>Full name *</label><input required name="name" autocomplete="name"></div>
         <div class="field"><label>Phone number *</label><input required type="tel" name="phone" autocomplete="tel"></div>
         <div class="field full"><label>Email (optional)</label><input type="email" name="email" autocomplete="email"></div>
-        <div class="field full"><label>Full delivery address *</label><textarea required name="address" autocomplete="street-address" placeholder="House/Flat, Street, Area, City, Province"></textarea></div>
+        <div class="field full"><label>City *</label><input required name="city" autocomplete="address-level2" placeholder="e.g. Lahore"></div>
+        <div class="field full"><label>Full delivery address *</label><textarea required name="address" autocomplete="street-address" placeholder="House/Flat, Street, Area, Block/Road, Landmark, etc."></textarea></div>
       </div>
       <div id="order-summary" class="admin-card" style="margin-top:12px;background:#FAF9F7;"><b>Order summary</b><div style="margin-top:8px;display:grid;gap:4px;font-size:13px;"><span>Price: <strong id="order-price">${money(calc.unitPrice)}</strong></span><span>Delivery: <strong id="order-delivery">${calc.delivery?money(calc.delivery):'FREE'}</strong></span><span>Total: <strong id="order-total">${money(calc.total)}</strong></span><span style="color:var(--ink-soft);">Stock available: ${stock}</span></div></div>
       <div class="modal-close-row"><button type="button" class="btn ghost" onclick="closeModal()">Cancel</button><button id="order-submit-btn" type="submit" class="btn">Submit Order</button></div>
@@ -891,7 +904,7 @@ async function submitOrderForm(productId){
   const form=document.getElementById('order-form'); if(!form)return; const btn=document.getElementById('order-submit-btn'); const fd=new FormData(form); const p=PRODUCTS.find(x=>x.id===productId); if(!p)return;
   const stock=Math.max(0,Number(p.stock)||0), qty=Number(fd.get('quantity'))||1; if(qty<1||qty>stock){toast('Quantity must be between 1 and available stock.');return;}
   if(btn){btn.disabled=true;btn.textContent='Submitting...';}
-  try{ await submitStoreOrder(productId,qty,{name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:String(fd.get('email')||'').trim(),address:String(fd.get('address')||'').trim()}); closeModal(); toast('Order submitted successfully ✓'); }
+  try{ await submitStoreOrder(productId,qty,{name:String(fd.get('name')||'').trim(),phone:String(fd.get('phone')||'').trim(),email:String(fd.get('email')||'').trim(),city:String(fd.get('city')||'').trim(),address:String(fd.get('address')||'').trim()}); closeModal(); toast('Order submitted successfully ✓'); }
   catch(e){console.error(e);toast('Order failed: '+(e.message||'Please try again'));if(btn){btn.disabled=false;btn.textContent='Submit Order';}}
 }
 function money(n){return 'Rs. '+Number(n||0).toLocaleString('en-PK',{maximumFractionDigits:2});}
@@ -1788,6 +1801,7 @@ function renderAdminSidebar(){
     <div class="group-label">Catalog</div>
     ${item('products','Products')}
     ${item('categories','Categories')}
+    ${item('orders','Orders')}
     <div class="group-label">Marketing</div>
     ${item('flashsales','Flash Sales')}
     ${item('banners','Banners')}
@@ -2024,10 +2038,10 @@ function saveProductForm(pid, isNew){
 
 /* ---------- Orders ---------- */
 function adminOrders(){
-  if(!ORDERS.length) return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div class="empty-state"><div class="icon">📦</div><h3>No orders yet</h3><p>Customer orders will appear here.</p></div></div>`;
-  return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div style="overflow:auto"><table class="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>⋮</th></tr></thead><tbody>${ORDERS.map(o=>`<tr><td>${esc(String(o.id).slice(0,8))}<br><small>${o.created_at?new Date(o.created_at).toLocaleString():''}</small></td><td>${esc(o.customer_name||'')}<br>${esc(o.customer_phone||'')}</td><td>${esc(o.product_title||'')}</td><td>${Number(o.quantity)||0}</td><td>${money(o.total_amount)}</td><td><span class="badge-status ${o.status==='confirmed'?'on':o.status==='cancelled'?'off':''}">${formatOrderStatus(o.status)}</span></td><td><button class="btn small ghost" onclick="showOrderDetails('${o.id}')">⋮ Details</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  if(!ORDERS.length) return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div class="empty-state"><div class="icon">📦</div><h3>No orders yet</h3><p>Orders submitted from the customer storefront will appear here.</p></div></div>`;
+  return `<div class="admin-topbar"><h1>Orders</h1><button class="btn small ghost" onclick="loadOrders().then(render)">Refresh</button></div><div class="admin-card"><div style="overflow:auto"><table class="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>City</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th><th>⋮</th></tr></thead><tbody>${ORDERS.map(o=>`<tr><td>${esc(String(o.id).slice(0,8))}<br><small>${o.created_at?new Date(o.created_at).toLocaleString():''}</small></td><td>${esc(o.customer_name||'')}<br>${esc(o.customer_phone||'')}</td><td>${esc(o.city||'')}</td><td>${esc(o.product_title||'')}</td><td>${Number(o.quantity)||0}</td><td>${money(o.total_amount)}</td><td><span class="badge-status ${o.status==='confirmed'?'on':o.status==='cancelled'?'off':''}">${formatOrderStatus(o.status)}</span></td><td><button class="btn small ghost" onclick="showOrderDetails('${o.id}')">⋮ Details</button></td></tr>`).join('')}</tbody></table></div></div>`;
 }
-function showOrderDetails(id){ const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o)return; showModal(`<h2>Order Details</h2><div style="display:grid;gap:7px;font-size:13px"><b>${esc(o.product_title||'')}</b><span>Name: ${esc(o.customer_name||'')}</span><span>Phone: ${esc(o.customer_phone||'')}</span><span>Email: ${esc(o.customer_email||'')}</span><span>Address: ${esc(o.customer_address||'')}</span><span>Quantity: ${Number(o.quantity)||0}</span><span>Delivery: ${money(o.delivery_charges)}</span><span>Total: <b>${money(o.total_amount)}</b></span><span>Status: ${formatOrderStatus(o.status)}</span></div><div class="modal-close-row">${o.status==='pending'?`<button class="btn" onclick="updateOrderStatus('${o.id}','confirmed')">Confirm Order</button><button class="btn danger" onclick="updateOrderStatus('${o.id}','cancelled')">Cancel Order</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`); }
+function showOrderDetails(id){ const o=ORDERS.find(x=>String(x.id)===String(id)); if(!o)return; showModal(`<h2>Order Details</h2><div style="display:grid;gap:7px;font-size:13px"><b>${esc(o.product_title||'')}</b><span>Name: ${esc(o.customer_name||'')}</span><span>Phone: ${esc(o.customer_phone||'')}</span><span>Email: ${esc(o.customer_email||'')}</span><span>City: ${esc(o.city||'')}</span><span>Full delivery address: ${esc(o.customer_address||'')}</span><span>Quantity: ${Number(o.quantity)||0}</span><span>Delivery: ${money(o.delivery_charges)}</span><span>Total: <b>${money(o.total_amount)}</b></span><span>Status: ${formatOrderStatus(o.status)}</span></div><div class="modal-close-row">${o.status==='pending'?`<button class="btn" onclick="updateOrderStatus('${o.id}','confirmed')">Confirm Order</button><button class="btn danger" onclick="updateOrderStatus('${o.id}','cancelled')">Cancel Order</button>`:''}<button class="btn ghost" onclick="closeModal()">Close</button></div>`); }
 async function updateOrderStatus(id,status){ if(!SUPABASE_ADMIN||!supabaseClient)return; try{ const {error}=await supabaseClient.from('storex_orders').update({status,updated_at:new Date().toISOString()}).eq('id',id); if(error)throw error; const o=ORDERS.find(x=>String(x.id)===String(id)); if(o)o.status=status; closeModal(); render(); toast(status==='confirmed'?'Order confirmed ✓':'Order cancelled'); }catch(e){toast('Order update failed: '+(e.message||'Unknown error'));} }
 
 /* ---------- Categories ---------- */
