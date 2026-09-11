@@ -913,35 +913,13 @@ function formatOrderStatus(s){return s==='confirmed'?'Confirmed':s==='cancelled'
 async function boot(){
   const demo=buildDemoConfig();
   // Instant first paint: show the local/demo structure immediately; cloud sync continues in background.
-  if(!SETTINGS){ SETTINGS=JSON.parse(JSON.stringify(demo.settings)); PRODUCTS=demo.products; CATEGORIES=demo.categories; FLASHSALES=demo.flashsales; BANNERS=demo.banners; MEDIA=demo.media; PAGES=demo.pages; normalizeCloudState(); applyTheme(); render(); }
+  if(!SETTINGS){ SETTINGS=JSON.parse(JSON.stringify(demo.settings)); SETTINGS.hero=Object.assign({},SETTINGS.hero,{enabled:false,image:'',desktopImage:'',mobileImage:''}); PRODUCTS=[]; CATEGORIES=[]; FLASHSALES=[]; BANNERS=[]; MEDIA=[]; PAGES=[]; normalizeCloudState(); applyTheme(); render(); }
 
   /* ---------- CACHE-FIRST STARTUP ----------
      If this browser has a previous complete snapshot, render it first.
      Cloud reads below still run and become authoritative afterwards. */
-  let __fvCachedSnapshot = null;
-  try{
-    __fvCachedSnapshot = window.StoreXCustomerCache && window.StoreXCustomerCache.read();
-    if(window.StoreXCustomerCache && window.StoreXCustomerCache.isUsable(__fvCachedSnapshot)){
-      const c = __fvCachedSnapshot.data || {};
-      if(c.settings) SETTINGS = c.settings;
-      if(Array.isArray(c.products)) PRODUCTS = c.products;
-      if(Array.isArray(c.categories)) CATEGORIES = c.categories;
-      if(Array.isArray(c.flashsales)) FLASHSALES = c.flashsales;
-      if(Array.isArray(c.banners)) BANNERS = c.banners;
-      if(Array.isArray(c.media)) MEDIA = c.media;
-      if(Array.isArray(c.pages)) PAGES = c.pages;
-
-      normalizeCloudState();
-      applyTheme();
-      injectGA();
-      render();
-      applyMediaSizing();
-      initLazyMedia();
-      window.FV_CACHE_FIRST_RENDERED = true;
-    }
-  }catch(e){
-    console.warn('StoreX cache-first startup skipped:', e);
-  }
+  // Initial customer content stays blank until the authoritative Supabase state is loaded.
+  window.FV_CACHE_FIRST_RENDERED = false;
 
   try{ await initSupabase(); }catch(e){ console.error('Supabase initialization failed:',e); toast('Supabase connection failed. StoreX is running in safe demo mode; admin saves are disabled.'); }
 
@@ -955,20 +933,16 @@ async function boot(){
     darazPromo:Object.assign({},DEFAULT_SETTINGS.darazPromo,SETTINGS.darazPromo||{}),
     mediaSizing:Object.assign({},DEFAULT_SETTINGS.mediaSizing,SETTINGS.mediaSizing||{})
   });
-  PRODUCTS = await loadKey(KEYS.products, demo.products);
-  CATEGORIES = await loadKey(KEYS.categories, demo.categories);
-  FLASHSALES = await loadKey(KEYS.flashsales, demo.flashsales);
-  BANNERS = await loadKey(KEYS.banners, demo.banners);
-  MEDIA = await loadKey(KEYS.media, demo.media);
-  PAGES = await loadKey(KEYS.pages, demo.pages);
+  PRODUCTS = await loadKey(KEYS.products, []);
+  CATEGORIES = await loadKey(KEYS.categories, []);
+  FLASHSALES = await loadKey(KEYS.flashsales, []);
+  BANNERS = await loadKey(KEYS.banners, []);
+  MEDIA = await loadKey(KEYS.media, []);
+  PAGES = await loadKey(KEYS.pages, []);
    await loadOrders();
   // StoreX branding/content is fixed for this version of the storefront.
   SETTINGS.siteName = 'StoreX';
-  const standardPages = buildStoreXPages();
-  standardPages.forEach(sp=>{
-    const existing = PAGES.find(pg=>pg.slug===sp.slug);
-    if(existing) Object.assign(existing, sp); else PAGES.push(sp);
-  });
+  // Public pages come only from the backend/admin configuration.
   applyTheme();
   injectGA();
   window.addEventListener('hashchange', render);
